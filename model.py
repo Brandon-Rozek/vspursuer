@@ -1,18 +1,18 @@
 """
 Defining what it means to be a model
 """
+from common import set_to_str
 from logic import (
 PropositionalVariable, get_propostional_variables, Logic, Term,
 Operation
 ) 
-from typing import Set, List, Dict
+from typing import Set, List, Dict, Tuple
 from itertools import product
+from functools import lru_cache
 
 __all__ = ['ModelValue', 'ModelFunction', 'Model']
 
 
-def set_to_str(x):
-    return "{" + ", ".join((str(xi) for xi in x)) + "}"
 
 class ModelValue:
     def __init__(self, name):
@@ -80,7 +80,7 @@ Designated Values: {set_to_str(self.designated_values)}
         return result
 
 
-def evaluate_term(t: Term, f: Dict[PropositionalVariable, ModelValue], interpretation: Dict[Operation, ModelFunction]):
+def evaluate_term(t: Term, f: Dict[PropositionalVariable, ModelValue], interpretation: Dict[Operation, ModelFunction]) -> ModelValue:
     if isinstance(t, PropositionalVariable):
         return f[t]
 
@@ -93,24 +93,28 @@ def evaluate_term(t: Term, f: Dict[PropositionalVariable, ModelValue], interpret
     return model_function(*model_arguments)
 
 def all_model_valuations(
-        pvars: Set[PropositionalVariable],
-        mvalues: Set[ModelValue]):
+        pvars: Tuple[PropositionalVariable],
+        mvalues: Tuple[ModelValue]):
     
-    pvars = list(pvars)
     possible_valuations = [mvalues for _ in pvars]
     all_possible_values = product(*possible_valuations)
 
     for valuation in all_possible_values:
-        mapping = dict()
+        mapping: Dict[PropositionalVariable, ModelValue] = dict()
         assert len(pvars) == len(valuation)
         for pvar, value in zip(pvars, valuation):
             mapping[pvar] = value
         yield mapping
-    
 
-def satisfiable(logic: Logic, model: Model, interpretation: Dict[Operation, ModelFunction]):
-    pvars = get_propostional_variables(logic.rules)
-    mappings = all_model_valuations(pvars, model.carrier_set)
+@lru_cache
+def all_model_valuations_cached(
+        pvars: Tuple[PropositionalVariable],
+        mvalues: Tuple[ModelValue]):
+    return list(all_model_valuations(pvars, mvalues))
+
+def satisfiable(logic: Logic, model: Model, interpretation: Dict[Operation, ModelFunction]) -> bool:
+    pvars = tuple(get_propostional_variables(tuple(logic.rules)))
+    mappings = all_model_valuations_cached(pvars, tuple(model.carrier_set))
 
     for mapping in mappings:
         for rule in logic.rules:
@@ -120,6 +124,7 @@ def satisfiable(logic: Logic, model: Model, interpretation: Dict[Operation, Mode
                 if t not in model.designated_values:
                     premise_met = False
                     break
+            
             if not premise_met:
                 continue
             

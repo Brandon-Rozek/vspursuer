@@ -23,37 +23,37 @@ x = PropositionalVariable("x")
 y = PropositionalVariable("y")
 z = PropositionalVariable("z")
 
-
 implication_rules = {
-    Rule({}, Implication(x, x)),
+    Rule(set(), Implication(x, x)),
     Rule({Implication(x, y), Implication(y,  z)}, Implication(x, z)),
-    Rule({}, Implication(Implication(x, Implication(x, y)), Implication(x, y))),
-    Rule({}, Implication(Implication(x, Implication(y, z)), Implication(y, Implication(x, z)))),
-    Rule({}, Implication(Implication(x, y), Implication(Implication(z, x), Implication(z, y)))),
-    Rule({}, Implication(Implication(x, y), Implication(Implication(y, z), Implication(x, z)))),
+    Rule({Implication(x, Implication(x, y)),}, Implication(x, y)),
+    Rule({Implication(x, Implication(y, z)),}, Implication(y, Implication(x, z))),
+    Rule({Implication(x, y),}, Implication(Implication(z, x), Implication(z, y))),
+    Rule({Implication(x, y),}, Implication(Implication(y, z), Implication(x, z))),
     Rule({Implication(x, y), x}, y)
 }
 
 negation_rules = {
-    Rule({}, Implication(Negation(Negation(x)), x)),
-    Rule({}, Implication(x, Negation(Negation(x)))),
+    Rule({Negation(Negation(x)),}, x),
+    Rule({x,}, Negation(Negation(x))),
     Rule({Implication(x, y)}, Implication(Negation(y), Negation(x))),
-    Rule({}, Implication(Implication(x, y), Implication(Negation(y), Negation(x))))
+    Rule({Implication(x, y),}, Implication(Negation(y), Negation(x)))
 }
 
 conjunction_rules = {
     Rule({y, z}, Conjunction(y, z)),
-    Rule({}, Implication(Conjunction(x, y), x)),
-    Rule({}, Implication(Conjunction(x, y), y)),
-    Rule({}, Implication(Conjunction(Implication(x, y), Implication(x, z)), Implication(x, Conjunction(y, z))))
+    Rule({Conjunction(x, y),}, x),
+    Rule({Conjunction(x, y),}, y),
+    Rule({Conjunction(Implication(x, y), Implication(x, z)),}, Implication(x, Conjunction(y, z)))
 }
 
 disjunction_rules = {
-    Rule({}, Implication(x, Disjunction(x, y))),
-    Rule({}, Implication(y, Disjunction(x, y))),
-    Rule({}, Implication(Conjunction(Implication(x, z), Implication(y, z)),  Implication(Disjunction(x, y), z))),
-    Rule({}, Implication(Conjunction(x, Disjunction(y, z)), Disjunction(Conjunction(x, y), Conjunction(x, z))))
+    Rule({x,}, Disjunction(x, y)),
+    Rule({y,}, Disjunction(x, y)),
+    Rule({Conjunction(Implication(x, z), Implication(y, z)),}, Implication(Disjunction(x, y), z)),
+    Rule({Conjunction(x, Disjunction(y, z)),}, Disjunction(Conjunction(x, y), Conjunction(x, z)))
 }
+
 
 logic_rules = implication_rules | negation_rules | conjunction_rules | disjunction_rules
 
@@ -118,7 +118,7 @@ interpretation = {
 # Generate models of R of a given size
 
 model_size = 2
-satisfiable_models = generate_model(R_logic, model_size)
+satisfiable_models = generate_model(R_logic, model_size, print_model=True)
 
 print(f"There are {len(satisfiable_models)} satisfiable models of element length {model_size}")
 

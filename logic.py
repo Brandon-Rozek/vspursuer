@@ -1,4 +1,4 @@
-from typing import Any, Set
+from typing import Any, Set, Tuple
 from functools import lru_cache
 
 class Operation:
@@ -38,14 +38,10 @@ class PropositionalVariable(Term):
     
     def __hash__(self):
         return self.hashed_value
-    # def __setattr__(self, name: str, value: Any):
-        # raise Exception("Propositional variables are immutable")
+
     def __str__(self):
         return self.name
 
-# def PropTerm(Term):
-#     def __init__(self, v: PropositionalVariable):
-#         self.v = v
 
 class OpTerm(Term):
     def __init__(self, operation: Operation, arguments):
@@ -65,11 +61,11 @@ class OpTerm(Term):
         arg_strs = [str(a) for a in self.arguments]
         return self.operation.symbol + "(" + ",".join(arg_strs) + ")"
 
+# Standard operators
 Negation = Operation("¬", 1)
 Conjunction = Operation("∧", 2)
 Disjunction = Operation("∨", 2)
 Implication = Operation("→", 2)
-
 
 class Inequation:
     def __init__(self, antecedant : Term, consequent: Term):
@@ -104,18 +100,19 @@ class Logic:
         self.rules = rules
 
 
-def get_prop_var_from_term(t: Term):
+def get_prop_var_from_term(t: Term) -> Set[PropositionalVariable]:
     if isinstance(t, PropositionalVariable):
         return {t,}
 
-    result = set()
+    result: Set[PropositionalVariable] = set()
     for arg in t.arguments:
         result |= get_prop_var_from_term(arg)
     
     return result
 
-def get_propostional_variables(rules):
-    vars = set()
+@lru_cache
+def get_propostional_variables(rules: Tuple[Rule]) -> Set[PropositionalVariable]:
+    vars: Set[PropositionalVariable] = set()
 
     for rule in rules:
         # Get all vars in premises
@@ -126,3 +123,13 @@ def get_propostional_variables(rules):
         vars |= get_prop_var_from_term(rule.conclusion)
 
     return vars
+
+def get_operations_from_term(t: Term) -> Set[Operation]:
+    if isinstance(t, PropositionalVariable):
+        return set()
+    
+    result: Set[Operation] = {t.operation,}
+    for arg in t.arguments:
+        result |= get_operations_from_term(arg)
+    
+    return result
