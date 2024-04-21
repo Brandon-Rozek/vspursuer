@@ -22,7 +22,7 @@ def possible_functions(operation, carrier_set):
         new_function = dict()
         for input, output in zip(inputs, outputs):
             new_function[input] = output
-        
+
         yield ModelFunction(new_function, operation.symbol)
 
 
@@ -44,7 +44,6 @@ def only_rules_with(rules: Set[Rule], operation: Operation) -> Set[Rule]:
         if is_valid:
             result_rules.append(rule)
     return result_rules
-
 
 
 def possible_interpretations(
@@ -88,9 +87,24 @@ def possible_interpretations(
         yield interpretation
 
 def generate_model(logic: Logic, number_elements: int, num_solutions: int = -1, print_model=False):
+    assert number_elements > 0
     carrier_set = {
         ModelValue("a" + str(i)) for i in range(number_elements)
     }
+
+    ordering = set()
+
+    # a(0) is less than all other elements
+    a0 = ModelValue("a0")
+    for v in carrier_set:
+        if v != a0:
+            ordering.add(a0 < v)
+
+    # Every other element is less than a(n - 1)
+    an = ModelValue(f"a{number_elements-1}")
+    for v in carrier_set:
+        if an != v:
+            ordering.add(v < an)
 
     possible_designated_values = possible_designations(carrier_set)
 
@@ -102,7 +116,7 @@ def generate_model(logic: Logic, number_elements: int, num_solutions: int = -1, 
 
         for interpretation in possible_interps:
             is_valid = True
-            model = Model(carrier_set, set(interpretation.values()), designated_values)
+            model = Model(carrier_set, set(interpretation.values()), designated_values, ordering)
             # Iteratively test possible interpretations
             # by adding one axiom at a time
             for rule in logic.rules:
@@ -110,12 +124,12 @@ def generate_model(logic: Logic, number_elements: int, num_solutions: int = -1, 
                 if not satisfiable(small_logic, model, interpretation):
                     is_valid = False
                     break
-            
+
             if is_valid:
                 satisfied_models.append(model)
                 if print_model:
                     print(model, flush=True)
-            
+
             if num_solutions >= 0 and len(satisfied_models) >= num_solutions:
                 return satisfied_models
 

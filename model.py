@@ -5,8 +5,8 @@ from common import set_to_str
 from logic import (
 PropositionalVariable, get_propostional_variables, Logic, Term,
 Operation
-) 
-from typing import Set, List, Dict, Tuple
+)
+from typing import Set, List, Dict, Tuple, Optional
 from itertools import product
 from functools import lru_cache
 
@@ -27,6 +27,9 @@ class ModelValue:
         return self.hashed_value
     def __eq__(self, other):
         return isinstance(other, ModelValue) and self.name == other.name
+    def __lt__(self, other):
+        assert isinstance(other, ModelValue)
+        return ModelOrderConstraint(self, other)
 
 
 class ModelFunction:
@@ -42,9 +45,9 @@ class ModelFunction:
                 corrected_mapping[tuple(k)] = v
             else: # Assume it's atomic
                 corrected_mapping[(k,)] = v
-        
+
         self.mapping = corrected_mapping
-    
+
     def __str__(self):
         str_dict = dict()
         for k, v in self.mapping.items():
@@ -54,29 +57,44 @@ class ModelFunction:
 
     def __call__(self, *args):
         return self.mapping[args]
-    
+
     # def __eq__(self, other):
     #     return isinstance(other, ModelFunction) and self.name == other.name and self.arity == other.arity
+
+class ModelOrderConstraint:
+    # a < b
+    def __init__(self, a: ModelValue, b: ModelValue):
+        self.a = a
+        self.b = b
+    def __hash__(self):
+        return hash(self.a) * hash(self.b)
+    def __eq__(self, other):
+        return isinstance(other, ModelOrderConstraint) and \
+            self.a == other.a and self.b == other.b
 
 class Model:
     def __init__(
             self,
             carrier_set: Set[ModelValue],
             logical_operations: Set[ModelFunction],
-            designated_values: Set[ModelValue]
+            designated_values: Set[ModelValue],
+            ordering: Optional[Set[ModelOrderConstraint]] = None
     ):
         assert designated_values <= carrier_set
         self.carrier_set = carrier_set
         self.logical_operations = logical_operations
         self.designated_values = designated_values
-    
+        self.ordering = ordering  if ordering is not None else set()
+        # TODO: Make sure ordering is "valid"
+        # That is: transitive, etc.
+
     def __str__(self):
         result = f"""Carrier Set: {set_to_str(self.carrier_set)}
 Designated Values: {set_to_str(self.designated_values)}
 """
         for function in self.logical_operations:
             result += f"{str(function)}\n"
-        
+
         return result
 
 
@@ -89,13 +107,13 @@ def evaluate_term(t: Term, f: Dict[PropositionalVariable, ModelValue], interpret
     for logic_arg in t.arguments:
         model_arg = evaluate_term(logic_arg, f, interpretation)
         model_arguments.append(model_arg)
-    
+
     return model_function(*model_arguments)
 
 def all_model_valuations(
         pvars: Tuple[PropositionalVariable],
         mvalues: Tuple[ModelValue]):
-    
+
     possible_valuations = [mvalues for _ in pvars]
     all_possible_values = product(*possible_valuations)
 
@@ -116,20 +134,33 @@ def satisfiable(logic: Logic, model: Model, interpretation: Dict[Operation, Mode
     pvars = tuple(get_propostional_variables(tuple(logic.rules)))
     mappings = all_model_valuations_cached(pvars, tuple(model.carrier_set))
 
+    """
+    TODO: Make sure that ordering for conjunction and disjunction
+    at the model function level.
+    """
+
     for mapping in mappings:
         for rule in logic.rules:
             premise_met = True
+            premise_ts = set()
             for premise in rule.premises:
-                t = evaluate_term(premise, mapping, interpretation)
-                if t not in model.designated_values:
+                premise_t = evaluate_term(premise, mapping, interpretation)
+                if premise_t not in model.designated_values:
                     premise_met = False
                     break
-            
+                premise_ts.add(premise_t)
+
             if not premise_met:
                 continue
-            
-            t = evaluate_term(rule.conclusion, mapping, interpretation)
-            if t not in model.designated_values:
+
+            consequent_t = evaluate_term(rule.conclusion, mapping, interpretation)
+
+            if consequent_t not in model.designated_values:
                 return False
-    
+
+            # Make sure ordering constraint is met
+            for premise_t in premise_ts:
+                if consequent_t < premise_t in model.ordering:
+                    return False
+
     return True
