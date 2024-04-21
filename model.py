@@ -4,7 +4,7 @@ Defining what it means to be a model
 from common import set_to_str
 from logic import (
 PropositionalVariable, get_propostional_variables, Logic, Term,
-Operation
+Operation, Conjunction, Disjunction
 )
 from typing import Set, List, Dict, Tuple, Optional
 from itertools import product
@@ -130,14 +130,44 @@ def all_model_valuations_cached(
         mvalues: Tuple[ModelValue]):
     return list(all_model_valuations(pvars, mvalues))
 
+def rule_ordering_satisfied(model: Model, interpretation: Dict[Operation, ModelFunction]) -> bool:
+    """
+    Currently testing whether this function helps with runtime...
+    """
+    if Conjunction in interpretation:
+        possible_inputs = ((a, b) for (a, b) in product(model.carrier_set, model.carrier_set))
+        for a, b in possible_inputs:
+            output = interpretation[Conjunction](a, b)
+            if a < b in model.ordering and output != a:
+                print("RETURNING FALSE")
+                return False
+            if b < a in model.ordering and output != b:
+                print("RETURNING FALSE")
+                return False
+
+    if Disjunction in interpretation:
+        possible_inputs = ((a, b) for (a, b) in product(model.carrier_set, model.carrier_set))
+        for a, b in possible_inputs:
+            output = interpretation[Disjunction](a, b)
+            if a < b in model.ordering and output != b:
+                print("RETURNING FALSE")
+                return False
+            if b < a in model.ordering and output != a:
+                print("RETURNING FALSE")
+                return False
+
+    return True
+
+
+
 def satisfiable(logic: Logic, model: Model, interpretation: Dict[Operation, ModelFunction]) -> bool:
     pvars = tuple(get_propostional_variables(tuple(logic.rules)))
     mappings = all_model_valuations_cached(pvars, tuple(model.carrier_set))
 
-    """
-    TODO: Make sure that ordering for conjunction and disjunction
-    at the model function level.
-    """
+    # NOTE: Does not look like rule ordering is helping for finding
+    # models of R...
+    if not rule_ordering_satisfied(model, interpretation):
+        return False
 
     for mapping in mappings:
         for rule in logic.rules:

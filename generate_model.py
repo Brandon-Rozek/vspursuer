@@ -3,7 +3,7 @@ File which generates all the models
 """
 from common import set_to_str
 from logic import Logic, Operation, Rule, get_operations_from_term, PropositionalVariable
-from model import ModelValue, Model, satisfiable, ModelFunction
+from model import ModelValue, Model, satisfiable, ModelFunction, ModelOrderConstraint
 from itertools import combinations, chain, product
 from typing import Set
 
@@ -48,7 +48,7 @@ def only_rules_with(rules: Set[Rule], operation: Operation) -> Set[Rule]:
 
 def possible_interpretations(
         logic: Logic, carrier_set: Set[ModelValue],
-        designated_values: Set[ModelValue]):
+        designated_values: Set[ModelValue], ordering: Set[ModelOrderConstraint]):
     operations = []
     model_functions = []
 
@@ -64,7 +64,7 @@ def possible_interpretations(
         if len(restricted_rules) > 0:
             small_logic = Logic({operation,}, restricted_rules)
             for f in candidate_functions:
-                small_model = Model(carrier_set, {f,}, designated_values)
+                small_model = Model(carrier_set, {f,}, designated_values, ordering)
                 interp = {operation: f}
                 if satisfiable(small_logic, small_model, interp):
                     passed_functions.append(f)
@@ -112,7 +112,7 @@ def generate_model(logic: Logic, number_elements: int, num_solutions: int = -1, 
     for designated_values in possible_designated_values:
         designated_values = set(designated_values)
         print("Considering models for designated values", set_to_str(designated_values))
-        possible_interps = possible_interpretations(logic, carrier_set, designated_values)
+        possible_interps = possible_interpretations(logic, carrier_set, designated_values, ordering)
 
         for interpretation in possible_interps:
             is_valid = True
