@@ -212,15 +212,10 @@ def model_closure(initial_set: Set[ModelValue], mfunctions: Set[ModelFunction]):
 
     return current_set
 
-def violates_vsp(model: Model, interpretation: Dict[Operation, ModelFunction]) -> bool:
+def has_vsp(model: Model, interpretation: Dict[Operation, ModelFunction]) -> bool:
     """
     Tells you whether a model violates the
     variable sharing property.
-
-    If it returns false, it is still possible that
-    the variable sharing property is violated
-    just that we didn't check for the appopriate
-    subalgebras.
     """
 
     impfunction = interpretation[Implication]
@@ -232,6 +227,8 @@ def violates_vsp(model: Model, interpretation: Dict[Operation, ModelFunction]) -
     for (x, y) in product(model.carrier_set, model.carrier_set):
         if impfunction(x, y) not in model.designated_values:
             I.add((x, y))
+
+    print("I", [(str(x), str(y)) for (x, y) in I])
 
     # Construct the powerset without the empty set
     s = list(I)
@@ -251,12 +248,18 @@ def violates_vsp(model: Model, interpretation: Dict[Operation, ModelFunction]) -
 
         # If the carrier set intersects, then we violate VSP
         if len(carrier_set_left & carrier_set_right) > 0:
-            print("FAIL: Carrier sets intersect")
-            return True
+            continue
+            # print("FAIL: Carrier sets intersect")
+            # print(xys)
+            # return True
 
         for (x2, y2) in product(carrier_set_left, carrier_set_right):
             if impfunction(x2, y2) in model.designated_values:
+                continue
                 print(f"({x2}, {y2}) take on a designated value")
                 return True
+        
+        return True
 
     return False
+

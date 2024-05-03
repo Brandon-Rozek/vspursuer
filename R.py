@@ -11,7 +11,7 @@ from logic import (
     Disjunction,
     Rule,
 )
-from model import Model, ModelFunction, ModelValue, violates_vsp
+from model import Model, ModelFunction, ModelValue, has_vsp, satisfiable
 from generate_model import generate_model
 
 
@@ -117,11 +117,182 @@ interpretation = {
 
 # Generate models of R of a given size
 
-model_size = 2
-satisfiable_models = generate_model(R_logic, model_size, print_model=True)
+# model_size = 2
+# solutions = generate_model(R_logic, model_size, print_model=True)
 
-print(f"There are {len(satisfiable_models)} satisfiable models of element length {model_size}")
+# print(f"There are {len(solutions)} satisfiable models of element length {model_size}")
 
-for smodel in satisfiable_models:
-    print(violates_vsp(smodel[0], smodel[1]))
+# for model, interpretation in solutions:
+#     print(has_vsp(model, interpretation))
 
+######
+
+# Smallest model for R that has the variable sharing property
+
+a0 = ModelValue("a0")
+a1 = ModelValue("a1")
+a2 = ModelValue("a2")
+a3 = ModelValue("a3")
+a4 = ModelValue("a4")
+a5 = ModelValue("a5")
+
+carrier_set = { a0, a1, a2, a3, a4, a5 }
+designated_values = {a1, a2, a3, a4, a5 }
+
+mnegation = ModelFunction(1, {
+    a5: a0,
+    a4: a1,
+    a3: a3,
+    a2: a2,
+    a1: a4,
+    a0: a5
+})
+
+mimplication = ModelFunction(2, {
+    (a5, a5): a5,
+    (a5, a4): a0,
+    (a5, a3): a0,
+    (a5, a2): a0,
+    (a5, a1): a0,
+    (a5, a0): a0,
+
+    (a4, a5): a5,
+    (a4, a4): a1,
+    (a4, a3): a0,
+    (a4, a2): a0,
+    (a4, a1): a0,
+    (a4, a0): a0,
+
+    (a3, a5): a5,
+    (a3, a4): a3,
+    (a3, a3): a3,
+    (a3, a2): a0,
+    (a3, a1): a0,
+    (a3, a0): a0,
+
+    (a2, a5): a5,
+    (a2, a4): a2,
+    (a2, a3): a0,
+    (a2, a2): a2,
+    (a2, a1): a0,
+    (a2, a0): a0,
+
+    (a1, a5): a5,
+    (a1, a4): a4,
+    (a1, a3): a3,
+    (a1, a2): a2,
+    (a1, a1): a1,
+    (a1, a0): a0,
+
+    (a0, a5): a5,
+    (a0, a4): a5,
+    (a0, a3): a5,
+    (a0, a2): a5,
+    (a0, a1): a5,
+    (a0, a0): a5
+})
+
+
+mconjunction = ModelFunction(2, {
+    (a5, a5): a5,
+    (a5, a4): a4,
+    (a5, a3): a3,
+    (a5, a2): a2,
+    (a5, a1): a1,
+    (a5, a0): a0,
+
+    (a4, a5): a4,
+    (a4, a4): a4,
+    (a4, a3): a3,
+    (a4, a2): a2,
+    (a4, a1): a1,
+    (a4, a0): a0,
+
+    (a3, a5): a3,
+    (a3, a4): a3,
+    (a3, a3): a3,
+    (a3, a2): a1,
+    (a3, a1): a1,
+    (a3, a0): a0,
+
+    (a2, a5): a2,
+    (a2, a4): a2,
+    (a2, a3): a1,
+    (a2, a2): a2,
+    (a2, a1): a1,
+    (a2, a0): a0,
+
+    (a1, a5): a1,
+    (a1, a4): a1,
+    (a1, a3): a1,
+    (a1, a2): a1,
+    (a1, a1): a1,
+    (a1, a0): a0,
+
+    (a0, a5): a0,
+    (a0, a4): a0,
+    (a0, a3): a0,
+    (a0, a2): a0,
+    (a0, a1): a0,
+    (a0, a0): a0
+})
+
+mdisjunction = ModelFunction(2, {
+    (a5, a5): a5,
+    (a5, a4): a5,
+    (a5, a3): a5,
+    (a5, a2): a5,
+    (a5, a1): a5,
+    (a5, a0): a5,
+
+    (a4, a5): a5,
+    (a4, a4): a4,
+    (a4, a3): a4,
+    (a4, a2): a4,
+    (a4, a1): a4,
+    (a4, a0): a4,
+
+    (a3, a5): a5,
+    (a3, a4): a4,
+    (a3, a3): a3,
+    (a3, a2): a4,
+    (a3, a1): a3,
+    (a3, a0): a3,
+
+    (a2, a5): a5,
+    (a2, a4): a4,
+    (a2, a3): a4,
+    (a2, a2): a2,
+    (a2, a1): a2,
+    (a2, a0): a2,
+
+    (a1, a5): a5,
+    (a1, a4): a4,
+    (a1, a3): a3,
+    (a1, a2): a2,
+    (a1, a1): a1,
+    (a1, a0): a1,
+
+    (a0, a5): a5,
+    (a0, a4): a4,
+    (a0, a3): a3,
+    (a0, a2): a2,
+    (a0, a1): a1,
+    (a0, a0): a0
+})
+
+logical_operations = {
+    mnegation, mimplication, mconjunction, mdisjunction
+}
+R_model_6 = Model(carrier_set, logical_operations, designated_values)
+
+interpretation = {
+    Negation: mnegation,
+    Conjunction: mconjunction,
+    Disjunction: mdisjunction,
+    Implication: mimplication
+}
+
+print("Satisfiable", satisfiable(R_logic, R_model_6, interpretation))
+
+print("Has VSP?", has_vsp(R_model_6, interpretation))
