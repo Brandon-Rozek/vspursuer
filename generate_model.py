@@ -5,7 +5,7 @@ from common import set_to_str
 from logic import Logic, Operation, Rule, get_operations_from_term, PropositionalVariable
 from model import ModelValue, Model, satisfiable, ModelFunction, ModelOrderConstraint
 from itertools import combinations, chain, product
-from typing import Set
+from typing import Set, List, Dict, Tuple
 
 def possible_designations(iterable):
     """Powerset without the empty and complete set"""
@@ -23,7 +23,7 @@ def possible_functions(operation, carrier_set):
         for input, output in zip(inputs, outputs):
             new_function[input] = output
 
-        yield ModelFunction(new_function, operation.symbol)
+        yield ModelFunction(arity, new_function, operation.symbol)
 
 
 def only_rules_with(rules: Set[Rule], operation: Operation) -> Set[Rule]:
@@ -86,7 +86,7 @@ def possible_interpretations(
             interpretation[operation] = function
         yield interpretation
 
-def generate_model(logic: Logic, number_elements: int, num_solutions: int = -1, print_model=False):
+def generate_model(logic: Logic, number_elements: int, num_solutions: int = -1, print_model=False) -> List[Tuple[Model, Dict[Operation, ModelFunction]]]:
     assert number_elements > 0
     carrier_set = {
         ModelValue("a" + str(i)) for i in range(number_elements)
@@ -108,7 +108,7 @@ def generate_model(logic: Logic, number_elements: int, num_solutions: int = -1, 
 
     possible_designated_values = possible_designations(carrier_set)
 
-    satisfied_models = []
+    solutions: List[Tuple[Model, Dict[Operation, ModelFunction]]] = []
     for designated_values in possible_designated_values:
         designated_values = set(designated_values)
         print("Considering models for designated values", set_to_str(designated_values))
@@ -126,11 +126,12 @@ def generate_model(logic: Logic, number_elements: int, num_solutions: int = -1, 
                     break
 
             if is_valid:
-                satisfied_models.append(model)
+                solutions.append((model, interpretation))
+                # satisfied_models.append(model)
                 if print_model:
                     print(model, flush=True)
 
-            if num_solutions >= 0 and len(satisfied_models) >= num_solutions:
-                return satisfied_models
+            if num_solutions >= 0 and len(solutions) >= num_solutions:
+                return solutions
 
-    return satisfied_models
+    return solutions

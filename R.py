@@ -11,7 +11,7 @@ from logic import (
     Disjunction,
     Rule,
 )
-from model import Model, ModelFunction, ModelValue
+from model import Model, ModelFunction, ModelValue, violates_vsp
 from generate_model import generate_model
 
 
@@ -71,26 +71,26 @@ a1 = ModelValue("a1")
 
 carrier_set = {a0, a1}
 
-mnegation = ModelFunction({
+mnegation = ModelFunction(1, {
     a0: a1,
     a1: a0
 })
 
-mimplication = ModelFunction({
+mimplication = ModelFunction(2, {
     (a0, a0): a1,
     (a0, a1): a1,
     (a1, a0): a0,
     (a1, a1): a1
 })
 
-mconjunction = ModelFunction({
+mconjunction = ModelFunction(2, {
     (a0, a0): a0,
     (a0, a1): a0,
     (a1, a0): a0,
     (a1, a1): a1  
 })
 
-mdisjunction = ModelFunction({
+mdisjunction = ModelFunction(2, {
     (a0, a0): a0,
     (a0, a1): a1,
     (a1, a0): a1,
@@ -121,4 +121,7 @@ model_size = 2
 satisfiable_models = generate_model(R_logic, model_size, print_model=True)
 
 print(f"There are {len(satisfiable_models)} satisfiable models of element length {model_size}")
+
+for smodel in satisfiable_models:
+    print(violates_vsp(smodel[0], smodel[1]))
 

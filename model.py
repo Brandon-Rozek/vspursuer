@@ -4,11 +4,13 @@ Defining what it means to be a model
 from common import set_to_str
 from logic import (
 PropositionalVariable, get_propostional_variables, Logic, Term,
-Operation, Conjunction, Disjunction
+Operation, Conjunction, Disjunction, Implication
 )
-from typing import Set, List, Dict, Tuple, Optional
-from itertools import product
+from typing import Set, Dict, Tuple, Optional
 from functools import lru_cache
+from itertools import combinations, chain, product
+from copy import deepcopy
+
 
 __all__ = ['ModelValue', 'ModelFunction', 'Model']
 
@@ -33,17 +35,21 @@ class ModelValue:
 
 
 class ModelFunction:
-    def __init__(self, mapping, operation_name = ""):
+    def __init__(self, arity: int, mapping, operation_name = ""):
         self.operation_name = operation_name
+        self.arity = arity
 
         # Correct input to always be a tuple
         corrected_mapping = dict()
         for k, v in mapping.items():
             if isinstance(k, tuple):
+                assert len(k) == arity
                 corrected_mapping[k] = v
             elif isinstance(k, list):
+                assert len(k) == arity
                 corrected_mapping[tuple(k)] = v
             else: # Assume it's atomic
+                assert arity == 1
                 corrected_mapping[(k,)] = v
 
         self.mapping = corrected_mapping
@@ -188,9 +194,69 @@ def satisfiable(logic: Logic, model: Model, interpretation: Dict[Operation, Mode
             if consequent_t not in model.designated_values:
                 return False
 
-            # Make sure ordering constraint is met
-            for premise_t in premise_ts:
-                if consequent_t < premise_t in model.ordering:
-                    return False
-
     return True
+
+
+def model_closure(initial_set: Set[ModelValue], mfunctions: Set[ModelFunction]):
+    last_set: Set[ModelValue] = set()
+    current_set: Set[ModelValue] = initial_set
+
+    while last_set != current_set:
+        last_set = deepcopy(current_set)
+
+        for mfun in mfunctions:
+            # Get output for every possible input configuration
+            # from last_set
+            for args in product(*(last_set for _ in range(mfun.arity))):
+                current_set.add(mfun(*args))
+
+    return current_set
+
+def violates_vsp(model: Model, interpretation: Dict[Operation, ModelFunction]) -> bool:
+    """
+    Tells you whether a model violates the
+    variable sharing property.
+
+    If it returns false, it is still possible that
+    the variable sharing property is violated
+    just that we didn't check for the appopriate
+    subalgebras.
+    """
+
+    impfunction = interpretation[Implication]
+
+    # Compute I the set of tuples (x, y) where
+    # x -> y does not take a designiated value
+    I: Set[Tuple[ModelValue, ModelValue]] = set()
+
+    for (x, y) in product(model.carrier_set, model.carrier_set):
+        if impfunction(x, y) not in model.designated_values:
+            I.add((x, y))
+
+    # Construct the powerset without the empty set
+    s = list(I)
+    I_power = chain.from_iterable(combinations(s, r) for r in range(1, len(s) + 1))
+    # ((x1, y1)), ((x1, y1), (x2, y2)), ...
+
+    for xys in I_power:
+        # Compute the closure of all operations
+        # with just the xs
+        xs = {xy[0] for xy in xys}
+        carrier_set_left: Set[ModelValue] = model_closure(xs, model.logical_operations)
+
+        # Compute the closure of all operations
+        # with just the ys
+        ys = {xy[1] for xy in xys}
+        carrier_set_right: Set[ModelValue] = model_closure(ys, model.logical_operations)
+
+        # If the carrier set intersects, then we violate VSP
+        if len(carrier_set_left & carrier_set_right) > 0:
+            print("FAIL: Carrier sets intersect")
+            return True
+
+        for (x2, y2) in product(carrier_set_left, carrier_set_right):
+            if impfunction(x2, y2) in model.designated_values:
+                print(f"({x2}, {y2}) take on a designated value")
+                return True
+
+    return False
