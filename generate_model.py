@@ -2,7 +2,7 @@
 File which generates all the models
 """
 from common import set_to_str
-from logic import Logic, Operation, Rule, get_operations_from_term, PropositionalVariable
+from logic import Logic, Operation, Rule, get_operations_from_term
 from model import ModelValue, Model, satisfiable, ModelFunction, ModelOrderConstraint
 from itertools import combinations, chain, product
 from typing import Set, List, Dict, Tuple
@@ -15,8 +15,8 @@ def possible_designations(iterable):
 def possible_functions(operation, carrier_set):
     arity = operation.arity
 
-    inputs = list(product(*(carrier_set for _ in range(arity))))
-    possible_outputs = product(*(carrier_set for _ in range(len(inputs))))
+    inputs = list(product(carrier_set, repeat=arity))
+    possible_outputs = product(carrier_set, repeat=len(inputs))
     for outputs in possible_outputs:
         assert len(inputs) == len(outputs)
         new_function = dict()

@@ -117,13 +117,15 @@ interpretation = {
 
 # Generate models of R of a given size
 
-# model_size = 2
-# solutions = generate_model(R_logic, model_size, print_model=True)
+model_size = 2
+solutions = generate_model(R_logic, model_size, print_model=True)
 
-# print(f"There are {len(solutions)} satisfiable models of element length {model_size}")
+print(f"There are {len(solutions)} satisfiable models of element length {model_size}")
 
-# for model, interpretation in solutions:
-#     print(has_vsp(model, interpretation))
+for model, interpretation in solutions:
+    print("Has VSP?", has_vsp(model, interpretation))
+
+print("-" * 5)
 
 ######
 
@@ -292,6 +294,8 @@ interpretation = {
     Disjunction: mdisjunction,
     Implication: mimplication
 }
+
+print(R_model_6)
 
 print("Satisfiable", satisfiable(R_logic, R_model_6, interpretation))
 

@@ -120,8 +120,7 @@ def all_model_valuations(
         pvars: Tuple[PropositionalVariable],
         mvalues: Tuple[ModelValue]):
 
-    possible_valuations = [mvalues for _ in pvars]
-    all_possible_values = product(*possible_valuations)
+    all_possible_values = product(mvalues, repeat=len(pvars))
 
     for valuation in all_possible_values:
         mapping: Dict[PropositionalVariable, ModelValue] = dict()
@@ -207,7 +206,7 @@ def model_closure(initial_set: Set[ModelValue], mfunctions: Set[ModelFunction]):
         for mfun in mfunctions:
             # Get output for every possible input configuration
             # from last_set
-            for args in product(*(last_set for _ in range(mfun.arity))):
+            for args in product(last_set, repeat=mfun.arity):
                 current_set.add(mfun(*args))
 
     return current_set
@@ -228,8 +227,6 @@ def has_vsp(model: Model, interpretation: Dict[Operation, ModelFunction]) -> boo
         if impfunction(x, y) not in model.designated_values:
             I.add((x, y))
 
-    print("I", [(str(x), str(y)) for (x, y) in I])
-
     # Construct the powerset without the empty set
     s = list(I)
     I_power = chain.from_iterable(combinations(s, r) for r in range(1, len(s) + 1))
@@ -249,15 +246,10 @@ def has_vsp(model: Model, interpretation: Dict[Operation, ModelFunction]) -> boo
         # If the carrier set intersects, then we violate VSP
         if len(carrier_set_left & carrier_set_right) > 0:
             continue
-            # print("FAIL: Carrier sets intersect")
-            # print(xys)
-            # return True
 
         for (x2, y2) in product(carrier_set_left, carrier_set_right):
             if impfunction(x2, y2) in model.designated_values:
                 continue
-                print(f"({x2}, {y2}) take on a designated value")
-                return True
         
         return True
 
