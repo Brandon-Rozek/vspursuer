@@ -59,7 +59,7 @@ class ModelFunction:
         for k, v in self.mapping.items():
             inputstr = "(" + ", ".join(str(ki) for ki in k) + ")"
             str_dict[inputstr] = str(v)
-        return str(str_dict)
+        return self.operation_name + " " + str(str_dict)
 
     def __call__(self, *args):
         return self.mapping[args]
@@ -247,11 +247,14 @@ def has_vsp(model: Model, interpretation: Dict[Operation, ModelFunction]) -> boo
         if len(carrier_set_left & carrier_set_right) > 0:
             continue
 
+        invalid = False
         for (x2, y2) in product(carrier_set_left, carrier_set_right):
             if impfunction(x2, y2) in model.designated_values:
-                continue
+                invalid = True
+                break
         
-        return True
+        if not invalid:
+            return True
 
     return False
 
