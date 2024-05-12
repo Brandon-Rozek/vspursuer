@@ -8,7 +8,7 @@ Operation, Conjunction, Disjunction, Implication
 )
 from typing import Set, Dict, Tuple, Optional
 from functools import lru_cache
-from itertools import combinations, chain, product
+from itertools import combinations, chain, product, permutations
 from copy import deepcopy
 
 
@@ -32,6 +32,8 @@ class ModelValue:
     def __lt__(self, other):
         assert isinstance(other, ModelValue)
         return ModelOrderConstraint(self, other)
+    def __deepcopy__(self, memo):
+        return ModelValue(self.name)
 
 
 class ModelFunction:
@@ -195,66 +197,47 @@ def satisfiable(logic: Logic, model: Model, interpretation: Dict[Operation, Mode
 
     return True
 
+from itertools import combinations_with_replacement
+from collections import defaultdict
 
 def model_closure(initial_set: Set[ModelValue], mfunctions: Set[ModelFunction]):
-    last_set: Set[ModelValue] = set()
-    current_set: Set[ModelValue] = initial_set
+    closure_set: Set[ModelValue] = initial_set
+    last_new = initial_set
+    changed = True
 
-    while last_set != current_set:
-        last_set = deepcopy(current_set)
+    while changed:
+        changed = False
+        new_elements = set()
+        old_closure = closure_set - last_new
+
+        # arity -> args
+        cached_args = defaultdict(list)
 
         for mfun in mfunctions:
-            # Get output for every possible input configuration
-            # from last_set
-            for args in product(last_set, repeat=mfun.arity):
-                current_set.add(mfun(*args))
 
-    return current_set
+            # Use cached args if this arity was looked at before
+            if mfun.arity in cached_args:
+                for args in cached_args[mfun.arity]:
+                    element = mfun(*args)
+                    if element not in closure_set:
+                        new_elements.add(element)
+                # Move onto next function
+                continue
 
-def has_vsp(model: Model, interpretation: Dict[Operation, ModelFunction]) -> bool:
-    """
-    Tells you whether a model violates the
-    variable sharing property.
-    """
+            # Iterate over how many new elements would be within the arguments
+            # NOTE: To not repeat work, there must be at least one new element
+            for num_new in range(1, mfun.arity + 1):
+                new_args = combinations_with_replacement(last_new, r=num_new)
+                old_args = combinations_with_replacement(old_closure, r=mfun.arity - num_new)
+                for new_arg, old_arg in product(new_args, old_args):
+                    for args in permutations(new_arg + old_arg):
+                        cached_args[mfun.arity].append(args)
+                        element = mfun(*args)
+                        if element not in closure_set:
+                            new_elements.add(element)
 
-    impfunction = interpretation[Implication]
+        closure_set.update(new_elements)
+        changed = len(new_elements) > 0
+        last_new = new_elements
 
-    # Compute I the set of tuples (x, y) where
-    # x -> y does not take a designiated value
-    I: Set[Tuple[ModelValue, ModelValue]] = set()
-
-    for (x, y) in product(model.carrier_set, model.carrier_set):
-        if impfunction(x, y) not in model.designated_values:
-            I.add((x, y))
-
-    # Construct the powerset without the empty set
-    s = list(I)
-    I_power = chain.from_iterable(combinations(s, r) for r in range(1, len(s) + 1))
-    # ((x1, y1)), ((x1, y1), (x2, y2)), ...
-
-    for xys in I_power:
-        # Compute the closure of all operations
-        # with just the xs
-        xs = {xy[0] for xy in xys}
-        carrier_set_left: Set[ModelValue] = model_closure(xs, model.logical_operations)
-
-        # Compute the closure of all operations
-        # with just the ys
-        ys = {xy[1] for xy in xys}
-        carrier_set_right: Set[ModelValue] = model_closure(ys, model.logical_operations)
-
-        # If the carrier set intersects, then we violate VSP
-        if len(carrier_set_left & carrier_set_right) > 0:
-            continue
-
-        invalid = False
-        for (x2, y2) in product(carrier_set_left, carrier_set_right):
-            if impfunction(x2, y2) in model.designated_values:
-                invalid = True
-                break
-        
-        if not invalid:
-            return True
-
-    return False
-
+    return closure_set

@@ -13,6 +13,7 @@ from logic import (
     Negation,
     Disjunction
 )
+from vsp import has_vsp
 
 def parse_matrices(infile: TextIO) -> List[Tuple[Model, Dict]]:
     next(infile) # Skip header line
@@ -42,12 +43,11 @@ def parse_matrices(infile: TextIO) -> List[Tuple[Model, Dict]]:
                     if designated_values is None:
                         break
 
-                    while True:
-                        result = parse_implication(infile, size)
-                        if result is None:
-                            break
-                        mimplication, hasnext = result
+                    results = parse_implication(infile, size)
+                    if result is None:
+                        break
 
+                    for mimplication in results:
                         logical_operations = {
                             mnegation, mconjunction, mdisjunction,
                             mimplication
@@ -60,10 +60,7 @@ def parse_matrices(infile: TextIO) -> List[Tuple[Model, Dict]]:
                             Implication: mimplication
                         }
                         solutions.append((model, interpretation))
-                        print(f"Parsed {len(solutions)} so far")
 
-                        if not hasnext:
-                            break
     return solutions
 
 def carrier_set_from_size(size: int):
@@ -78,7 +75,7 @@ def parse_size(infile: TextIO) -> Optional[int]:
         return None
     assert size > 0, "Unexpected size"
     return size
-    
+
 def parse_negation(infile: TextIO, size: int) -> Optional[ModelFunction]:
     line = next(infile).strip()
     if line == '-1':
@@ -87,12 +84,12 @@ def parse_negation(infile: TextIO, size: int) -> Optional[ModelFunction]:
     row = line.split(" ")
     assert len(row) == size + 1, "Negation table doesn't match size"
     mapping = {}
-    
+
     for i, j in zip(range(size + 1), row):
         x = mvalue_from_index(i)
         y = parse_mvalue(j)
         mapping[(x, )] = y
-    
+
     return ModelFunction(1, mapping, "Negation")
 
 
@@ -118,7 +115,7 @@ def determine_cresult(size: int, ordering: Dict[ModelValue, ModelValue], a: Mode
             if ordering[(c, d)]:
                 if ordering[(d, a)] and ordering [(d, b)]:
                     invalid = True
-        
+
         if not invalid:
             return c
 
@@ -131,7 +128,7 @@ def determine_dresult(size: int, ordering: Dict[ModelValue, ModelValue], a: Mode
             continue
         if not ordering[(b, c)]:
             continue
-        
+
         invalid = False
 
         for j in range(size + 1):
@@ -148,8 +145,8 @@ def determine_dresult(size: int, ordering: Dict[ModelValue, ModelValue], a: Mode
 def parse_order(infile: TextIO, size: int) -> Optional[Tuple[ModelFunction, ModelFunction]]:
     line = next(infile).strip()
     if line == '-1':
-        return None 
-    
+        return None
+
     table = line.split(" ")
 
     assert len(table) == (size + 1)**2
@@ -186,7 +183,7 @@ def parse_designated(infile: TextIO, size: int) -> Optional[Set[ModelValue]]:
     line = next(infile).strip()
     if line == '-1':
         return None
-    
+
     row = line.split(" ")
     assert len(row) == size + 1, "Designated table doesn't match size"
 
@@ -200,44 +197,45 @@ def parse_designated(infile: TextIO, size: int) -> Optional[Set[ModelValue]]:
     return designated_values
 
 
-def parse_implication(infile: TextIO, size: int) -> Optional[Tuple[ModelFunction, bool]]:
+def parse_implication(infile: TextIO, size: int) -> Optional[List[ModelFunction]]:
     line = next(infile).strip()
     if line == '-1':
         return None
-    
-    table = line.split(" ")
-    has_next = True
-    if table[-1] == '-1':
-        has_next = False
-        table = table[:-1] 
 
-    assert len(table) == (size + 1)**2
+    # Split and remove the last '-1' character
+    table = line.split(" ")[:-1]
 
-    mapping = {}
+    assert len(table) % (size + 1)**2 == 0
 
     table_i = 0
+    mimplications: List[ModelFunction] = []
 
-    for i in range(size + 1):
-        x = mvalue_from_index(i)
-        for j in range(size + 1):
-            y = mvalue_from_index(j)
+    for _ in range(len(table) // (size + 1)**2):
+        mapping = {}
 
-            r = parse_mvalue(table[table_i])
-            table_i += 1
+        for i in range(size + 1):
+            x = mvalue_from_index(i)
+            for j in range(size + 1):
+                y = mvalue_from_index(j)
 
-            mapping[(x, y)] = r
+                r = parse_mvalue(table[table_i])
+                table_i += 1
 
-    mimplication = ModelFunction(2, mapping, "Implication")
-    return mimplication, has_next
+                mapping[(x, y)] = r
+
+        mimplication = ModelFunction(2, mapping, "Implication")
+        mimplications.append(mimplication)
+
+    return mimplications
 
 
 if __name__ == "__main__":
-    from model import has_vsp
-
     solutions: List[Model] = parse_matrices(sys.stdin)
     print(f"Parsed {len(solutions)} matrices")
-    for model, interpretation in solutions:
+    for i, (model, interpretation) in enumerate(solutions):
         # print(model)
         if has_vsp(model, interpretation):
             print(model)
             print("Has VSP")
+        else:
+            print("Model", i, "does not have VSP")
