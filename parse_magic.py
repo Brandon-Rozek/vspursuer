@@ -60,6 +60,7 @@ def parse_matrices(infile: TextIO) -> List[Tuple[Model, Dict]]:
                             Implication: mimplication
                         }
                         solutions.append((model, interpretation))
+                        print(f"Parsed Matrix {len(solutions)}")
 
     return solutions
 
@@ -102,6 +103,7 @@ def parse_mvalue(x: str) -> ModelValue:
 def determine_cresult(size: int, ordering: Dict[ModelValue, ModelValue], a: ModelValue, b: ModelValue) -> ModelValue:
     for i in range(size + 1):
         c = mvalue_from_index(i)
+        
         if not ordering[(c, a)]:
             continue
         if not ordering[(c, b)]:
@@ -141,6 +143,7 @@ def determine_dresult(size: int, ordering: Dict[ModelValue, ModelValue], a: Mode
 
         if not invalid:
             return c
+    print(a, "|", b, "is not defined")
 
 def parse_order(infile: TextIO, size: int) -> Optional[Tuple[ModelFunction, ModelFunction]]:
     line = next(infile).strip()
@@ -160,6 +163,11 @@ def parse_order(infile: TextIO, size: int) -> Optional[Tuple[ModelFunction, Mode
             y = mvalue_from_index(j)
             omapping[(x, y)] = table[table_i] == '1'
             table_i += 1
+
+
+    # NOTE: Print omapping for debugging
+    for (x, y) in omapping.keys():
+        print(x, y, "maps to", omapping[(x, y)])
 
     cmapping = {}
     dmapping = {}
@@ -233,6 +241,10 @@ if __name__ == "__main__":
     solutions: List[Model] = parse_matrices(sys.stdin)
     print(f"Parsed {len(solutions)} matrices")
     for i, (model, interpretation) in enumerate(solutions):
+        # TODO: Check if conjunction and disjunction are well defined while parsing
+        model.logical_operations -= {interpretation[Conjunction], interpretation[Disjunction]}
+        del interpretation[Conjunction]
+        del interpretation[Disjunction]
         # print(model)
         if has_vsp(model, interpretation):
             print(model)
