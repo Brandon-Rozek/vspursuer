@@ -3,40 +3,62 @@ Check to see if the model has the variable
 sharing property.
 """
 from itertools import chain, combinations, product
-from typing import Dict, Set, Tuple, List
+from typing import Dict, List, Optional, Set, Tuple
 from model import (
-    Model, ModelFunction, ModelValue, model_closure
+    Model, model_closure, ModelFunction, ModelValue
 )
 from logic import Implication, Operation
 
-def preseed(initial_set: Set[ModelValue], cache:List[Tuple[Set[ModelValue], Set[ModelValue]]]):
+def preseed(
+        initial_set: Set[ModelValue],
+        cache:List[Tuple[Set[ModelValue], Set[ModelValue]]]):
     """
-    Cache contains caches of model closure calls:
-    Ex:
-    {1, 2, 3} -> {....}
+    Given a cache of previous model_closure calls,
+    use this to compute an initial model closure
+    set based on the initial set.
 
+    Basic Idea:
+    Let {1, 2, 3} -> X be in the cache.
     If {1,2,3} is a subset of initial set,
-    then {....} is the subset of the output of model_closure.
+    then X is the subset of the output of model_closure.
 
-    We'll use the output to speed up the saturation procedure
+    This is used to speed up subsequent calls to model_closure
     """
     candidate_preseed: Tuple[Set[ModelValue], int] = (None, None)
 
     for i, o in cache:
         if i < initial_set:
             cost = len(initial_set - i)
+            # If i is a subset with less missing elements than
+            # the previous candidate, then it's the new candidate.
             if candidate_preseed[1] is None or cost < candidate_preseed[1]:
                 candidate_preseed = o, cost
 
     same_set = candidate_preseed[1] == 0
     return candidate_preseed[0], same_set
 
-def has_vsp(model: Model, interpretation: Dict[Operation, ModelFunction]) -> bool:
-    """
-    Tells you whether a model has the
-    variable sharing property.
-    """
+class VSP_Result:
+    def __init__(
+            self, has_vsp: bool, subalgebra1: Optional[Set[ModelValue]] = None,
+            subalgebra2: Optional[Set[ModelValue]] = None, x: Optional[ModelValue] = None,
+            y: Optional[ModelValue] = None):
+        self.has_vsp = has_vsp
+        self.subalgebra1 = subalgebra1
+        self.subalgebra2 = subalgebra2
+        self.x = x
+        self.y = y
 
+    def __str__(self):
+        if self.has_vsp:
+            return "Model has the variable sharing property."
+        else:
+            return "Model does not have the variable sharing property."
+
+def has_vsp(model: Model, interpretation: Dict[Operation, ModelFunction]) -> VSP_Result:
+    """
+    Checks whether a model has the variable
+    sharing property.
+    """
     impfunction = interpretation[Implication]
 
     # Compute I the set of tuples (x, y) where
@@ -109,6 +131,6 @@ def has_vsp(model: Model, interpretation: Dict[Operation, ModelFunction]) -> boo
                 break
 
         if falsified:
-            return True
+            return VSP_Result(True, carrier_set_left, carrier_set_right, x2, y2)
 
-    return False
+    return VSP_Result(False)

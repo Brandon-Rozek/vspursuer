@@ -2,17 +2,17 @@
 Modeling the logic R
 """
 from logic import (
+    Conjunction,
+    Disjunction,
+    Implication,
+    Logic,
+    Negation,
     PropositionalVariable,
     Rule,
-    Logic,
-    Implication,
-    Conjunction,
-    Negation,
-    Disjunction,
-    Rule,
 )
-from model import Model, ModelFunction, ModelValue, has_vsp, satisfiable
+from model import Model, ModelFunction, ModelValue, satisfiable
 from generate_model import generate_model
+from vsp import has_vsp
 
 
 # ===================================================
@@ -63,7 +63,7 @@ R_logic = Logic(operations, logic_rules)
 
 # ===============================
 
-# Example Model of R
+# Example 2-element Model of R
 
 
 a0 = ModelValue("a0")
@@ -87,14 +87,14 @@ mconjunction = ModelFunction(2, {
     (a0, a0): a0,
     (a0, a1): a0,
     (a1, a0): a0,
-    (a1, a1): a1  
+    (a1, a1): a1
 })
 
 mdisjunction = ModelFunction(2, {
     (a0, a0): a0,
     (a0, a1): a1,
     (a1, a0): a1,
-    (a1, a1): a1  
+    (a1, a1): a1
 })
 
 
@@ -123,13 +123,14 @@ solutions = generate_model(R_logic, model_size, print_model=True)
 print(f"There are {len(solutions)} satisfiable models of element length {model_size}")
 
 for model, interpretation in solutions:
-    print("Has VSP?", has_vsp(model, interpretation))
+    print(has_vsp(model, interpretation))
 
 print("-" * 5)
 
 ######
 
 # Smallest model for R that has the variable sharing property
+# This has 6 elements
 
 a0 = ModelValue("a0")
 a1 = ModelValue("a1")
@@ -299,4 +300,4 @@ print(R_model_6)
 
 print("Satisfiable", satisfiable(R_logic, R_model_6, interpretation))
 
-print("Has VSP?", has_vsp(R_model_6, interpretation))
+print(has_vsp(R_model_6, interpretation))
