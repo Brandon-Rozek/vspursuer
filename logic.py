@@ -1,4 +1,4 @@
-from typing import Any, Set, Tuple
+from typing import Set, Tuple
 from functools import lru_cache
 
 class Operation:

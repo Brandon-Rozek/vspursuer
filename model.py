@@ -13,7 +13,8 @@ from itertools import combinations_with_replacement, permutations, product
 from typing import Dict, List, Set, Tuple
 
 
-__all__ = ['ModelValue', 'ModelFunction', 'Model']
+__all__ = ['ModelValue', 'ModelFunction', 'Model', 'Interpretation']
+
 
 class ModelValue:
     def __init__(self, name):
@@ -62,6 +63,8 @@ class ModelFunction:
 
     def __call__(self, *args):
         return self.mapping[args]
+
+Interpretation = Dict[Operation, ModelFunction]
 
 class Model:
     def __init__(
