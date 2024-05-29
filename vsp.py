@@ -4,6 +4,7 @@ sharing property.
 """
 from itertools import chain, combinations, product
 from typing import Dict, List, Optional, Set, Tuple
+from common import set_to_str
 from model import (
     Model, model_closure, ModelFunction, ModelValue
 )
@@ -39,20 +40,21 @@ def preseed(
 
 class VSP_Result:
     def __init__(
-            self, has_vsp: bool, subalgebra1: Optional[Set[ModelValue]] = None,
-            subalgebra2: Optional[Set[ModelValue]] = None, x: Optional[ModelValue] = None,
-            y: Optional[ModelValue] = None):
+            self, has_vsp: bool, model_name: Optional[str] = None,
+            subalgebra1: Optional[Set[ModelValue]] = None,
+            subalgebra2: Optional[Set[ModelValue]] = None):
         self.has_vsp = has_vsp
+        self.model_name = model_name
         self.subalgebra1 = subalgebra1
         self.subalgebra2 = subalgebra2
-        self.x = x
-        self.y = y
 
     def __str__(self):
-        if self.has_vsp:
-            return "Model has the variable sharing property."
-        else:
-            return "Model does not have the variable sharing property."
+        if not self.has_vsp:
+            return f"Model {self.model_name} does not have the variable sharing property."
+        return f"""Model {self.model_name} has the variable sharing property.
+Subalgebra 1: {set_to_str(self.subalgebra1)}
+Subalgebra 2: {set_to_str(self.subalgebra2)}
+"""
 
 def has_vsp(model: Model, interpretation: Dict[Operation, ModelFunction]) -> VSP_Result:
     """
@@ -131,6 +133,6 @@ def has_vsp(model: Model, interpretation: Dict[Operation, ModelFunction]) -> VSP
                 break
 
         if falsified:
-            return VSP_Result(True, carrier_set_left, carrier_set_right, x2, y2)
+            return VSP_Result(True, model.name, carrier_set_left, carrier_set_right)
 
-    return VSP_Result(False)
+    return VSP_Result(False, model.name)

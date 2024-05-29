@@ -1,4 +1,4 @@
-from typing import Set, Tuple
+from typing import Optional, Set, Tuple
 from functools import lru_cache
 
 class Operation:
@@ -9,10 +9,10 @@ class Operation:
         def immutable(self, name, value):
             raise Exception("Operations are immutable")
         self.__setattr__ = immutable
-    
+
     def __hash__(self):
         return self.hashed_value
-    
+
     def __call__(self, *args):
         # Ensure the arity is met
         assert len(args) == self.arity
@@ -20,7 +20,7 @@ class Operation:
         for t in args:
             assert isinstance(t, Term)
         return OpTerm(self, args)
-        
+
 
 class Term:
     def __init__(self):
@@ -35,7 +35,7 @@ class PropositionalVariable(Term):
         def immutable(self, name, value):
             raise Exception("Propositional variables are immutable")
         self.__setattr__ = immutable
-    
+
     def __hash__(self):
         return self.hashed_value
 
@@ -53,10 +53,10 @@ class OpTerm(Term):
         def immutable(self, name, value):
             raise Exception("Terms are immutable")
         self.__setattr__ = immutable
-    
+
     def __hash__(self):
         return self.hashed_value
-    
+
     def __str__(self):
         arg_strs = [str(a) for a in self.arguments]
         return self.operation.symbol + "(" + ",".join(arg_strs) + ")"
@@ -72,13 +72,13 @@ class Inequation:
         self.antecedant = antecedant
         self.consequent = consequent
     def __str__(self):
-        return str(self.antecedant) + "≤" + str(self.consequent) 
+        return str(self.antecedant) + "≤" + str(self.consequent)
 
 class InequalityRule:
     def __init__(self, premises : Set[Inequation], conclusion: Inequation):
         self.premises = premises
         self.conclusion = conclusion
-    
+
     def __str__(self):
         str_premises = [str(p) for p in self.premises]
         str_premises2 = "{" + ",".join(str_premises) + "}"
@@ -88,16 +88,22 @@ class Rule:
     def __init__(self, premises : Set[Term], conclusion: Term):
         self.premises = premises
         self.conclusion = conclusion
-    
+
     def __str__(self):
         str_premises = [str(p) for p in self.premises]
         str_premises2 = "{" + ",".join(str_premises) + "}"
         return str(str_premises2) + "=>" + str(self.conclusion)
 
 class Logic:
-    def __init__(self, operations: Set[Operation], rules: Set[Rule]):
+    def __init__(self,
+            operations: Set[Operation], rules: Set[Rule],
+            name: Optional[str] = None):
         self.operations = operations
         self.rules = rules
+        self.name = str(abs(hash((
+            frozenset(operations),
+            frozenset(rules)
+        ))))[:5] if name is None else name
 
 
 def get_prop_var_from_term(t: Term) -> Set[PropositionalVariable]:
@@ -107,7 +113,7 @@ def get_prop_var_from_term(t: Term) -> Set[PropositionalVariable]:
     result: Set[PropositionalVariable] = set()
     for arg in t.arguments:
         result |= get_prop_var_from_term(arg)
-    
+
     return result
 
 @lru_cache
@@ -118,7 +124,7 @@ def get_propostional_variables(rules: Tuple[Rule]) -> Set[PropositionalVariable]
         # Get all vars in premises
         for premise in rule.premises:
             vars |= get_prop_var_from_term(premise)
-    
+
         # Get vars in conclusion
         vars |= get_prop_var_from_term(rule.conclusion)
 
@@ -127,9 +133,9 @@ def get_propostional_variables(rules: Tuple[Rule]) -> Set[PropositionalVariable]
 def get_operations_from_term(t: Term) -> Set[Operation]:
     if isinstance(t, PropositionalVariable):
         return set()
-    
+
     result: Set[Operation] = {t.operation,}
     for arg in t.arguments:
         result |= get_operations_from_term(arg)
-    
+
     return result

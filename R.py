@@ -17,7 +17,9 @@ from vsp import has_vsp
 
 # ===================================================
 
-# Defining the logic of R
+"""
+Defining the Logic of R
+"""
 
 x = PropositionalVariable("x")
 y = PropositionalVariable("y")
@@ -59,12 +61,13 @@ logic_rules = implication_rules | negation_rules | conjunction_rules | disjuncti
 
 operations = {Negation, Conjunction, Disjunction, Implication}
 
-R_logic = Logic(operations, logic_rules)
+R_logic = Logic(operations, logic_rules, "R")
 
 # ===============================
 
-# Example 2-element Model of R
-
+"""
+Example 2-Element Model of R
+"""
 
 a0 = ModelValue("a0")
 a1 = ModelValue("a1")
@@ -103,7 +106,7 @@ designated_values = {a1}
 logical_operations = {
     mnegation, mimplication, mconjunction, mdisjunction
 }
-R_model_2 = Model(carrier_set, logical_operations, designated_values)
+R_model_2 = Model(carrier_set, logical_operations, designated_values, "R2")
 
 interpretation = {
     Negation: mnegation,
@@ -112,25 +115,36 @@ interpretation = {
     Implication: mimplication
 }
 
+print(R_model_2)
+
 
 # =================================
 
-# Generate models of R of a given size
+"""
+Generate models of R of a specified size
+"""
+
+print("*" * 30)
 
 model_size = 2
-solutions = generate_model(R_logic, model_size, print_model=True)
+print("Generating models of Logic", R_logic.name, "of size", model_size)
+solutions = generate_model(R_logic, model_size, print_model=False)
 
-print(f"There are {len(solutions)} satisfiable models of element length {model_size}")
+print(f"Found {len(solutions)} satisfiable models")
 
 for model, interpretation in solutions:
     print(has_vsp(model, interpretation))
 
-print("-" * 5)
+print("*" * 30)
 
 ######
 
-# Smallest model for R that has the variable sharing property
-# This has 6 elements
+"""
+Showing the smallest model for R that has the
+variable sharing property.
+
+This model has 6 elements.
+"""
 
 a0 = ModelValue("a0")
 a1 = ModelValue("a1")
@@ -149,7 +163,7 @@ mnegation = ModelFunction(1, {
     a2: a2,
     a1: a4,
     a0: a5
-})
+}, "¬")
 
 mimplication = ModelFunction(2, {
     (a5, a5): a5,
@@ -193,7 +207,7 @@ mimplication = ModelFunction(2, {
     (a0, a2): a5,
     (a0, a1): a5,
     (a0, a0): a5
-})
+}, "→")
 
 
 mconjunction = ModelFunction(2, {
@@ -238,7 +252,7 @@ mconjunction = ModelFunction(2, {
     (a0, a2): a0,
     (a0, a1): a0,
     (a0, a0): a0
-})
+}, "∧")
 
 mdisjunction = ModelFunction(2, {
     (a5, a5): a5,
@@ -282,12 +296,12 @@ mdisjunction = ModelFunction(2, {
     (a0, a2): a2,
     (a0, a1): a1,
     (a0, a0): a0
-})
+}, "∨")
 
 logical_operations = {
     mnegation, mimplication, mconjunction, mdisjunction
 }
-R_model_6 = Model(carrier_set, logical_operations, designated_values)
+R_model_6 = Model(carrier_set, logical_operations, designated_values, "R6")
 
 interpretation = {
     Negation: mnegation,
@@ -297,7 +311,5 @@ interpretation = {
 }
 
 print(R_model_6)
-
-print("Satisfiable", satisfiable(R_logic, R_model_6, interpretation))
-
+print(f"Model {R_model_6.name} satisfies logic {R_logic.name}?", satisfiable(R_logic, R_model_6, interpretation))
 print(has_vsp(R_model_6, interpretation))

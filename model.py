@@ -8,9 +8,9 @@ from logic import (
     Operation, PropositionalVariable, Term
 )
 from collections import defaultdict
-from functools import lru_cache
-from itertools import combinations_with_replacement, permutations, product
-from typing import Dict, List, Set, Tuple
+from functools import cached_property, lru_cache, reduce
+from itertools import chain, combinations_with_replacement, permutations, product
+from typing import Dict, List, Optional, Set, Tuple
 
 
 __all__ = ['ModelValue', 'ModelFunction', 'Model', 'Interpretation']
@@ -31,7 +31,6 @@ class ModelValue:
         return isinstance(other, ModelValue) and self.name == other.name
     def __deepcopy__(self, _):
         return ModelValue(self.name)
-
 
 class ModelFunction:
     def __init__(self, arity: int, mapping, operation_name = ""):
@@ -54,7 +53,21 @@ class ModelFunction:
 
         self.mapping = corrected_mapping
 
+    @cached_property
+    def domain(self):
+        result_set: Set[ModelValue] = set()
+        for args in self.mapping.keys():
+            for v in args:
+                result_set.add(v)
+        return result_set
+
     def __str__(self):
+        if self.arity == 1:
+            return unary_function_str(self)
+        elif self.arity == 2:
+            return binary_function_str(self)
+
+        # Default return dictionary representation
         str_dict = dict()
         for k, v in self.mapping.items():
             inputstr = "(" + ", ".join(str(ki) for ki in k) + ")"
@@ -64,6 +77,33 @@ class ModelFunction:
     def __call__(self, *args):
         return self.mapping[args]
 
+
+def unary_function_str(f: ModelFunction) -> str:
+    assert isinstance(f, ModelFunction) and f.arity == 1
+    sorted_domain = sorted(f.domain, key=lambda v : v.name)
+    header_line = f" {f.operation_name} | " + " ".join((str(v) for v in sorted_domain))
+    sep_line = "-" + ("-" * len(f.operation_name)) + "-+-" +\
+         ("-" * len(sorted_domain)) +\
+         ("-" * reduce(lambda sum, v : sum + len(v.name), sorted_domain, 0))
+    data_line = (" " * (len(f.operation_name) + 2)) + "| " + " ".join((str(f.mapping[(v,)]) for v in sorted_domain))
+    return "\n".join((header_line, sep_line, data_line)) + "\n"
+
+def binary_function_str(f: ModelFunction) -> str:
+    assert isinstance(f, ModelFunction) and f.arity == 2
+    sorted_domain = sorted(f.domain, key=lambda v : v.name)
+    max_col_width = max(chain((len(v.name) for v in sorted_domain), (len(f.operation_name),)))
+    header_line = f" {f.operation_name} " +\
+         (" " * (max_col_width - len(f.operation_name))) + "| " +\
+         " ".join((str(v) for v in sorted_domain))
+    sep_line = "-" + ("-" * max_col_width) + "-+-" +\
+         ("-" * len(sorted_domain)) +\
+         ("-" * reduce(lambda sum, v : sum + len(v.name), sorted_domain, 0))
+    data_lines = ""
+    for row_v in sorted_domain:
+        data_line = f" {row_v.name} | " + " ".join((str(f.mapping[(row_v, col_v)]) for col_v in sorted_domain))
+        data_lines += data_line + "\n"
+    return "\n".join((header_line, sep_line, data_lines))
+
 Interpretation = Dict[Operation, ModelFunction]
 
 class Model:
@@ -72,20 +112,28 @@ class Model:
             carrier_set: Set[ModelValue],
             logical_operations: Set[ModelFunction],
             designated_values: Set[ModelValue],
+            name: Optional[str] = None
     ):
         assert designated_values <= carrier_set
         self.carrier_set = carrier_set
         self.logical_operations = logical_operations
         self.designated_values = designated_values
+        self.name = str(abs(hash((
+            frozenset(carrier_set),
+            frozenset(logical_operations),
+            frozenset(designated_values)
+        ))))[:5] if name is None else name
 
     def __str__(self):
-        result = f"""Carrier Set: {set_to_str(self.carrier_set)}
+        result = ("=" * 25) + f"""
+Model Name: {self.name}
+Carrier Set: {set_to_str(self.carrier_set)}
 Designated Values: {set_to_str(self.designated_values)}
 """
         for function in self.logical_operations:
             result += f"{str(function)}\n"
 
-        return result
+        return result + ("=" * 25) + "\n"
 
 
 def evaluate_term(

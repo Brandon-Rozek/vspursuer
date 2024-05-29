@@ -6,10 +6,10 @@ from common import set_to_str
 from logic import Logic, Operation, Rule, get_operations_from_term
 from model import (
     Interpretation, ModelValue, Model,
-    satisfiable, ModelFunction
+    ModelFunction, satisfiable
 )
 from itertools import combinations, chain, product
-from typing import Set, List, Dict, Tuple
+from typing import Set, List, Tuple
 
 def possible_designations(iterable):
     """Powerset without the empty and complete set"""
