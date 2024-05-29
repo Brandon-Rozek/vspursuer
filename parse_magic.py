@@ -49,28 +49,39 @@ def parse_matrices(infile: TextIO) -> List[Tuple[Model, Dict]]:
 
                     for mimplication in results:
                         logical_operations = {
-                            mnegation, mconjunction, mdisjunction,
-                            mimplication
+                            mnegation, mimplication
                         }
-                        model = Model(carrier_set, logical_operations, designated_values)
+                        model = Model(carrier_set, logical_operations, designated_values, name=str(len(solutions)))
                         interpretation = {
                             Negation: mnegation,
-                            Conjunction: mconjunction,
-                            Disjunction: mdisjunction,
                             Implication: mimplication
                         }
+                        if mconjunction is not None:
+                            logical_operations.add(mconjunction)
+                            interpretation[Conjunction] = mconjunction
+                        if mdisjunction is not None:
+                            logical_operations.add(mdisjunction)
+                            interpretation[Disjunction] = mdisjunction
+
                         solutions.append((model, interpretation))
-                        print(f"Parsed Matrix {len(solutions)}")
+                        print(f"Parsed Matrix {model.name}")
 
     return solutions
 
 def carrier_set_from_size(size: int):
+    """
+    Construct a carrier set of model values
+    based on the desired size.
+    """
     return {
         mvalue_from_index(i) for i in range(size + 1)
     }
 
 def parse_size(infile: TextIO) -> Optional[int]:
-    # Elements are represented in hexidecimal
+    """
+    Parse the line representing the matrix size.
+    NOTE: Elements are represented in hexidecimal.
+    """
     size = int(next(infile), 16)
     if size == -1:
         return None
@@ -78,6 +89,9 @@ def parse_size(infile: TextIO) -> Optional[int]:
     return size
 
 def parse_negation(infile: TextIO, size: int) -> Optional[ModelFunction]:
+    """
+    Parse the line representing the negation table.
+    """
     line = next(infile).strip()
     if line == '-1':
         return None
@@ -91,16 +105,26 @@ def parse_negation(infile: TextIO, size: int) -> Optional[ModelFunction]:
         y = parse_mvalue(j)
         mapping[(x, )] = y
 
-    return ModelFunction(1, mapping, "Negation")
+    return ModelFunction(1, mapping, "¬")
 
 
 def mvalue_from_index(i: int):
+    """
+    Given an index, return the hexidecimal
+    representation of the model value.
+    """
     return ModelValue(f"a{hex(i)[-1]}")
 
 def parse_mvalue(x: str) -> ModelValue:
+    """
+    Parse an element and return the model value.
+    """
     return mvalue_from_index(int(x, 16))
 
 def determine_cresult(size: int, ordering: Dict[ModelValue, ModelValue], a: ModelValue, b: ModelValue) -> ModelValue:
+    """
+    Determine what a ∧ b should be given the ordering table.
+    """
     for i in range(size + 1):
         c = mvalue_from_index(i)
         
@@ -121,9 +145,10 @@ def determine_cresult(size: int, ordering: Dict[ModelValue, ModelValue], a: Mode
         if not invalid:
             return c
 
-    print(a, "&", b, "is not defined")
-
 def determine_dresult(size: int, ordering: Dict[ModelValue, ModelValue], a: ModelValue, b: ModelValue) -> ModelValue:
+    """
+    Determine what a ∨ b should be given the ordering table.
+    """
     for i in range(size + 1):
         c = mvalue_from_index(i)
         if not ordering[(a, c)]:
@@ -143,9 +168,11 @@ def determine_dresult(size: int, ordering: Dict[ModelValue, ModelValue], a: Mode
 
         if not invalid:
             return c
-    print(a, "|", b, "is not defined")
 
 def parse_order(infile: TextIO, size: int) -> Optional[Tuple[ModelFunction, ModelFunction]]:
+    """
+    Parse the line representing the ordering table
+    """
     line = next(infile).strip()
     if line == '-1':
         return None
@@ -164,11 +191,6 @@ def parse_order(infile: TextIO, size: int) -> Optional[Tuple[ModelFunction, Mode
             omapping[(x, y)] = table[table_i] == '1'
             table_i += 1
 
-
-    # NOTE: Print omapping for debugging
-    for (x, y) in omapping.keys():
-        print(x, y, "maps to", omapping[(x, y)])
-
     cmapping = {}
     dmapping = {}
 
@@ -178,16 +200,30 @@ def parse_order(infile: TextIO, size: int) -> Optional[Tuple[ModelFunction, Mode
         for j in range(size + 1):
             y = mvalue_from_index(j)
 
-            cmapping[(x, y)] = determine_cresult(size, omapping, x, y)
-            dmapping[(x, y)] = determine_dresult(size, omapping, x, y)
+            cresult = determine_cresult(size, omapping, x, y)
+            if cresult is None:
+                print("[Warning] Conjunction and Disjunction are not well-defined")
+                print(f"{x} ∧ {y} = ??")
+                return None, None
+            cmapping[(x, y)] = cresult
+
+            dresult = determine_dresult(size, omapping, x, y)
+            if dresult is None:
+                print("[Warning] Conjunction and Disjunction are not well-defined")
+                print(f"{x} ∨ {y} = ??")
+                return None, None
+            dmapping[(x, y)] = dresult
 
 
-    mconjunction = ModelFunction(2, cmapping, "Conjunction")
-    mdisjunction = ModelFunction(2, dmapping, "Disjunction")
+    mconjunction = ModelFunction(2, cmapping, "∧")
+    mdisjunction = ModelFunction(2, dmapping, "∨")
 
     return mconjunction, mdisjunction
 
 def parse_designated(infile: TextIO, size: int) -> Optional[Set[ModelValue]]:
+    """
+    Parse the line representing which model values are designated.
+    """
     line = next(infile).strip()
     if line == '-1':
         return None
@@ -206,6 +242,10 @@ def parse_designated(infile: TextIO, size: int) -> Optional[Set[ModelValue]]:
 
 
 def parse_implication(infile: TextIO, size: int) -> Optional[List[ModelFunction]]:
+    """
+    Parse the line representing the list of implication
+    tables.
+    """
     line = next(infile).strip()
     if line == '-1':
         return None
@@ -231,7 +271,7 @@ def parse_implication(infile: TextIO, size: int) -> Optional[List[ModelFunction]
 
                 mapping[(x, y)] = r
 
-        mimplication = ModelFunction(2, mapping, "Implication")
+        mimplication = ModelFunction(2, mapping, "→")
         mimplications.append(mimplication)
 
     return mimplications
@@ -241,13 +281,5 @@ if __name__ == "__main__":
     solutions: List[Model] = parse_matrices(sys.stdin)
     print(f"Parsed {len(solutions)} matrices")
     for i, (model, interpretation) in enumerate(solutions):
-        # TODO: Check if conjunction and disjunction are well defined while parsing
-        model.logical_operations -= {interpretation[Conjunction], interpretation[Disjunction]}
-        del interpretation[Conjunction]
-        del interpretation[Disjunction]
-        # print(model)
-        if has_vsp(model, interpretation):
-            print(model)
-            print("Has VSP")
-        else:
-            print("Model", i, "does not have VSP")
+        print(model)
+        print(has_vsp(model, interpretation))
