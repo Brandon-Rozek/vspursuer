@@ -80,9 +80,8 @@ def carrier_set_from_size(size: int):
 def parse_size(infile: TextIO) -> Optional[int]:
     """
     Parse the line representing the matrix size.
-    NOTE: Elements are represented in hexidecimal.
     """
-    size = int(next(infile), 16)
+    size = int(next(infile))
     if size == -1:
         return None
     assert size > 0, "Unexpected size"
@@ -110,16 +109,16 @@ def parse_negation(infile: TextIO, size: int) -> Optional[ModelFunction]:
 
 def mvalue_from_index(i: int):
     """
-    Given an index, return the hexidecimal
+    Given an index, return the
     representation of the model value.
     """
-    return ModelValue(f"a{hex(i)[-1]}")
+    return ModelValue(f"a{i}")
 
 def parse_mvalue(x: str) -> ModelValue:
     """
     Parse an element and return the model value.
     """
-    return mvalue_from_index(int(x, 16))
+    return mvalue_from_index(int(x))
 
 def determine_cresult(size: int, ordering: Dict[ModelValue, ModelValue], a: ModelValue, b: ModelValue) -> ModelValue:
     """
