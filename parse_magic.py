@@ -15,7 +15,18 @@ from logic import (
 )
 from vsp import has_vsp
 
-def parse_matrices(infile: TextIO) -> List[Tuple[Model, Dict]]:
+class SourceFile:
+    def __init__(self, fileobj: TextIO):
+        self.fileobj = fileobj
+        self.current_line = 0
+
+    def __next__(self):
+        contents = next(self.fileobj)
+        self.current_line += 1
+        return contents
+
+
+def parse_matrices(infile: SourceFile) -> List[Tuple[Model, Dict]]:
     next(infile) # Skip header line
 
     solutions: List[Tuple[Model, Dict]] = []
@@ -86,17 +97,17 @@ def carrier_set_from_size(size: int):
         mvalue_from_index(i) for i in range(size + 1)
     }
 
-def parse_size(infile: TextIO) -> Optional[int]:
+def parse_size(infile: SourceFile) -> Optional[int]:
     """
     Parse the line representing the matrix size.
     """
     size = int(next(infile))
     if size == -1:
         return None
-    assert size > 0, "Unexpected size"
+    assert size > 0, f"Unexpected size at line {infile.current_line}"
     return size
 
-def parse_negation(infile: TextIO, size: int) -> Optional[ModelFunction]:
+def parse_negation(infile: SourceFile, size: int) -> Optional[ModelFunction]:
     """
     Parse the line representing the negation table.
     """
@@ -105,7 +116,7 @@ def parse_negation(infile: TextIO, size: int) -> Optional[ModelFunction]:
         return None
 
     row = line.split(" ")
-    assert len(row) == size + 1, "Negation table doesn't match size"
+    assert len(row) == size + 1, f"Negation table doesn't match size at line {infile.current_line}"
     mapping = {}
 
     for i, j in zip(range(size + 1), row):
@@ -135,7 +146,7 @@ def determine_cresult(size: int, ordering: Dict[ModelValue, ModelValue], a: Mode
     """
     for i in range(size + 1):
         c = mvalue_from_index(i)
-        
+
         if not ordering[(c, a)]:
             continue
         if not ordering[(c, b)]:
@@ -187,7 +198,7 @@ def parse_order(infile: TextIO, size: int) -> Optional[Tuple[ModelFunction, Mode
 
     table = line.split(" ")
 
-    assert len(table) == (size + 1)**2
+    assert len(table) == (size + 1)**2, f"Order table doesn't match expected size at line {infile.current_line}"
 
     omapping = {}
     table_i = 0
@@ -237,7 +248,7 @@ def parse_designated(infile: TextIO, size: int) -> Optional[Set[ModelValue]]:
         return None
 
     row = line.split(" ")
-    assert len(row) == size + 1, "Designated table doesn't match size"
+    assert len(row) == size + 1, f"Designated table doesn't match expected size at line {infile.current_line}"
 
     designated_values = set()
 
@@ -261,7 +272,7 @@ def parse_implication(infile: TextIO, size: int) -> Optional[List[ModelFunction]
     # Split and remove the last '-1' character
     table = line.split(" ")[:-1]
 
-    assert len(table) % (size + 1)**2 == 0
+    assert len(table) % (size + 1)**2 == 0, f"Implication table does not match expected size at line {infile.current_line}"
 
     table_i = 0
     mimplications: List[ModelFunction] = []
@@ -286,7 +297,7 @@ def parse_implication(infile: TextIO, size: int) -> Optional[List[ModelFunction]
 
 
 if __name__ == "__main__":
-    solutions: List[Model] = parse_matrices(sys.stdin)
+    solutions: List[Model] = parse_matrices(SourceFile(sys.stdin))
     print(f"Parsed {len(solutions)} matrices")
     for i, (model, interpretation) in enumerate(solutions):
         print(model)
