@@ -27,31 +27,40 @@ def parse_matrices(infile: TextIO) -> List[Tuple[Model, Dict]]:
 
         carrier_set = carrier_set_from_size(size)
 
+        num_negation = 0
         while True:
             mnegation = parse_negation(infile, size)
             if mnegation is None:
                 break
+            num_negation += 1
 
+            num_order = 0
             while True:
                 result = parse_order(infile, size)
                 if result is None:
                     break
                 mconjunction, mdisjunction = result
+                num_order += 1
 
+                num_designated = 0
                 while True:
                     designated_values = parse_designated(infile, size)
                     if designated_values is None:
                         break
+                    num_designated += 1
 
                     results = parse_implication(infile, size)
                     if result is None:
                         break
 
+                    num_implication = 0
                     for mimplication in results:
                         logical_operations = {
                             mnegation, mimplication
                         }
-                        model = Model(carrier_set, logical_operations, designated_values, name=str(len(solutions)))
+                        num_implication += 1
+                        model_name = f"{size}.{num_negation}.{num_order}.{num_designated}.{num_implication}"
+                        model = Model(carrier_set, logical_operations, designated_values, name=model_name)
                         interpretation = {
                             Negation: mnegation,
                             Implication: mimplication
