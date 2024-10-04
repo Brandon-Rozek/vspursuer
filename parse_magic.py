@@ -26,68 +26,113 @@ class SourceFile:
         self.current_line += 1
         return contents
 
+class UglyHeader:
+    def __init__(self, negation: bool, necessitation: bool):
+        self.negation = negation
+        self.necessitation = necessitation
+
+# NOTE: Global variable used to keep track of solution models
+solutions: List[Tuple[Model, Dict]] = []
 
 def parse_matrices(infile: SourceFile) -> List[Tuple[Model, Dict]]:
-    next(infile) # Skip header line
+    global solutions
+    solutions = [] # Reset
+    header = parse_header(infile)
+    process_sizes(infile, header)
 
-    solutions: List[Tuple[Model, Dict]] = []
-
+def process_sizes(infile: SourceFile, header: UglyHeader):
+    """Stage 1"""
     while True:
         size = parse_size(infile)
         if size is None:
             break
-
         carrier_set = carrier_set_from_size(size)
+        process_negations(infile, header, size, carrier_set)
 
-        num_negation = 0
-        while True:
-            mnegation = parse_negation(infile, size)
+def process_negations(infile: SourceFile, header: UglyHeader, size: int, carrier_set: Set[ModelValue]):
+    """Stage 2 (Optional)"""
+    num_negation = 0
+    while True:
+        mnegation = None
+        if header.negation:
+            mnegation = parse_single_negation(infile, size)
             if mnegation is None:
                 break
             num_negation += 1
 
-            num_order = 0
-            while True:
-                result = parse_order(infile, size)
-                if result is None:
-                    break
-                mconjunction, mdisjunction = result
-                num_order += 1
+        process_orders(infile, header, size, carrier_set, num_negation, mnegation)
 
-                num_designated = 0
-                while True:
-                    designated_values = parse_designated(infile, size)
-                    if designated_values is None:
-                        break
-                    num_designated += 1
+        if not header.negation:
+            break
 
-                    results = parse_implication(infile, size)
-                    if result is None:
-                        break
+def process_orders(infile: SourceFile, header: UglyHeader, size: int, carrier_set: Set[ModelValue], num_negation: int, mnegation: Optional[ModelFunction]):
+    """Stage 3"""
+    num_order = 0
+    while True:
+        result = parse_single_order(infile, size)
+        if result is None:
+            break
+        mconjunction, mdisjunction = result
+        num_order += 1
+        process_designateds(infile, header, size, carrier_set, num_negation, mnegation, num_order, mconjunction, mdisjunction)
 
-                    num_implication = 0
-                    for mimplication in results:
-                        logical_operations = {
-                            mnegation, mimplication
-                        }
-                        num_implication += 1
-                        model_name = f"{size}.{num_negation}.{num_order}.{num_designated}.{num_implication}"
-                        model = Model(carrier_set, logical_operations, designated_values, name=model_name)
-                        interpretation = {
-                            Negation: mnegation,
-                            Implication: mimplication
-                        }
-                        if mconjunction is not None:
-                            logical_operations.add(mconjunction)
-                            interpretation[Conjunction] = mconjunction
-                        if mdisjunction is not None:
-                            logical_operations.add(mdisjunction)
-                            interpretation[Disjunction] = mdisjunction
+def process_designateds(infile: SourceFile, header: UglyHeader, size: int, carrier_set: Set[ModelValue], num_negation: int, mnegation: Optional[ModelFunction], num_order: int, mconjunction: Optional[ModelFunction], mdisjunction: Optional[ModelFunction]):
+    """Stage 4"""
+    num_designated = 0
+    while True:
+        designated_values = parse_single_designated(infile, size)
+        if designated_values is None:
+            break
+        num_designated += 1
+        process_implications(infile, header, size, carrier_set, num_negation, mnegation, num_order, mconjunction, mdisjunction, num_designated, designated_values)
 
-                        solutions.append((model, interpretation))
-                        print(f"Parsed Matrix {model.name}")
+def process_implications(
+    infile: SourceFile, header: UglyHeader, size: int, carrier_set: Set[ModelValue], num_negation: int, mnegation: Optional[ModelFunction],
+    num_order: int, mconjunction: Optional[ModelFunction], mdisjunction: Optional[ModelFunction], num_designated: int, designated_values: Set[ModelValue]):
+    """Stage 5"""
+    results = parse_implications(infile, size)
+    for num_implication, mimplication in enumerate(results, 1):
+        process_model(size, carrier_set, num_negation, mnegation, num_order, mconjunction, mdisjunction, num_designated, designated_values, num_implication, mimplication)
 
-    return solutions
+def process_model(
+    size: int, carrier_set: Set[ModelValue], num_negation: int, mnegation: Optional[ModelFunction],
+    num_order: int, mconjunction: Optional[ModelFunction], mdisjunction: Optional[ModelFunction], num_designated: int,
+    designated_values: Set[ModelValue], num_implication: int, mimplication: ModelFunction):
+    """Create Model"""
+    global solutions
+
+    logical_operations = { mimplication }
+    model_name = f"{size}{"." + str(num_negation) if num_negation != 0 else ""}.{num_order}.{num_designated}.{num_implication}"
+    model = Model(carrier_set, logical_operations, designated_values, name=model_name)
+    interpretation = {
+        Implication: mimplication
+    }
+    if mnegation is not None:
+        logical_operations.add(mnegation)
+        interpretation[Negation] = mnegation
+    if mconjunction is not None:
+        logical_operations.add(mconjunction)
+        interpretation[Conjunction] = mconjunction
+    if mdisjunction is not None:
+        logical_operations.add(mdisjunction)
+        interpretation[Disjunction] = mdisjunction
+
+    solutions.append((model, interpretation))
+    print(f"Parsed Matrix {model.name}")
+
+def parse_header(infile: SourceFile) -> UglyHeader:
+    """
+    Parse the header line from the ugly data format.
+    NOTE: Currently Incomplete.
+    """
+    header_line = next(infile).strip()
+    header_tokens = header_line.split(" ")
+    print(header_tokens)
+    assert header_tokens[0] in ["0", "1"]
+    assert header_tokens[6] in ["0", "1"]
+    negation_defined = bool(int(header_tokens[0]))
+    necessitation_defined = bool(int(header_tokens[6]))
+    return UglyHeader(negation_defined, necessitation_defined)
 
 def carrier_set_from_size(size: int):
     """
@@ -108,7 +153,7 @@ def parse_size(infile: SourceFile) -> Optional[int]:
     assert size > 0, f"Unexpected size at line {infile.current_line}"
     return size
 
-def parse_negation(infile: SourceFile, size: int) -> Optional[ModelFunction]:
+def parse_single_negation(infile: SourceFile, size: int) -> Optional[ModelFunction]:
     """
     Parse the line representing the negation table.
     """
@@ -189,7 +234,7 @@ def determine_dresult(size: int, ordering: Dict[ModelValue, ModelValue], a: Mode
         if not invalid:
             return c
 
-def parse_order(infile: TextIO, size: int) -> Optional[Tuple[ModelFunction, ModelFunction]]:
+def parse_single_order(infile: TextIO, size: int) -> Optional[Tuple[ModelFunction, ModelFunction]]:
     """
     Parse the line representing the ordering table
     """
@@ -240,7 +285,7 @@ def parse_order(infile: TextIO, size: int) -> Optional[Tuple[ModelFunction, Mode
 
     return mconjunction, mdisjunction
 
-def parse_designated(infile: TextIO, size: int) -> Optional[Set[ModelValue]]:
+def parse_single_designated(infile: TextIO, size: int) -> Optional[Set[ModelValue]]:
     """
     Parse the line representing which model values are designated.
     """
@@ -261,14 +306,12 @@ def parse_designated(infile: TextIO, size: int) -> Optional[Set[ModelValue]]:
     return designated_values
 
 
-def parse_implication(infile: TextIO, size: int) -> Optional[List[ModelFunction]]:
+def parse_implications(infile: TextIO, size: int) -> List[ModelFunction]:
     """
     Parse the line representing the list of implication
     tables.
     """
     line = next(infile).strip()
-    if line == '-1':
-        return None
 
     # Split and remove the last '-1' character
     table = line.split(" ")[:-1]
@@ -301,7 +344,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="VSP Checker")
     parser.add_argument("--verbose", action='store_true', help="Print out all parsed matrices")
     args = vars(parser.parse_args())
-    solutions: List[Model] = parse_matrices(SourceFile(sys.stdin))
+    parse_matrices(SourceFile(sys.stdin))
     print(f"Parsed {len(solutions)} matrices")
     for i, (model, interpretation) in enumerate(solutions):
         vsp_result = has_vsp(model, interpretation)
