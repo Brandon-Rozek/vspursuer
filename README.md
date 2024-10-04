@@ -9,7 +9,7 @@ Interested in seeing which satisfiable models from [arranstewart/magic](https://
 (2) Run our tool! It will first attempt to parse all the matrices in the output file and then check for the variable sharing property one-by-one.
 
 ```
-python3 parse_magic.py < UGLY_FILE_FROM_MAGIC
+python3 parse_magic.py < examples/R6
 ```
 
 If you face any troubles, feel free to reach out. This tool also has capabilities to generate satisfiable models given a specification (see: R.py), however, it is much slower than magic so you're better off using that.
