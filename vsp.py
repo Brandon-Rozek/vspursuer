@@ -63,6 +63,11 @@ def has_vsp(model: Model, interpretation: Dict[Operation, ModelFunction]) -> VSP
     """
     impfunction = interpretation[Implication]
 
+    # NOTE: No models with only one designated
+    # value satisfies VSP
+    if len(model.designated_values) == 1:
+        return VSP_Result(False, model.name)
+
     # Compute I the set of tuples (x, y) where
     # x -> y does not take a designiated value
     I: Set[Tuple[ModelValue, ModelValue]] = set()
