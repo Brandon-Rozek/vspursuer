@@ -31,91 +31,112 @@ class UglyHeader:
         self.negation = negation
         self.necessitation = necessitation
 
-# NOTE: Global variable used to keep track of solution models
-solutions: List[Tuple[Model, Dict]] = []
+class ModelBuilder:
+    def __init__(self):
+        self.size : int = 0
+        self.carrier_set : Set[ModelValue] = set()
+        self.num_negation: int = 0
+        self.mnegation: Optional[ModelFunction] = None
+        self.num_order: int = 0
+        self.mconjunction: Optional[ModelFunction] = None
+        self.mdisjunction: Optional[ModelFunction] = None
+        self.num_designated: int = 0
+        self.designated_values: Set[ModelValue] = set()
+        self.num_implication: int = 0
+        self.mimplication: Optional[ModelFunction] = None
 
 def parse_matrices(infile: SourceFile) -> List[Tuple[Model, Dict]]:
-    global solutions
     solutions = [] # Reset
     header = parse_header(infile)
-    process_sizes(infile, header)
+    current_model_parts = ModelBuilder()
+    process_sizes(infile, header, current_model_parts, solutions)
+    return solutions
 
-def process_sizes(infile: SourceFile, header: UglyHeader):
+def process_sizes(infile: SourceFile, header: UglyHeader, current_model_parts: ModelBuilder, solutions: List[Tuple[Model, Dict]]):
     """Stage 1"""
     while True:
         size = parse_size(infile)
         if size is None:
             break
         carrier_set = carrier_set_from_size(size)
-        process_negations(infile, header, size, carrier_set)
+        current_model_parts.size = size
+        current_model_parts.carrier_set = carrier_set
+        process_negations(infile, header, current_model_parts, solutions)
 
-def process_negations(infile: SourceFile, header: UglyHeader, size: int, carrier_set: Set[ModelValue]):
+def process_negations(infile: SourceFile, header: UglyHeader, current_model_parts: ModelBuilder, solutions: List[Tuple[Model, Dict]]):
     """Stage 2 (Optional)"""
     num_negation = 0
     while True:
         mnegation = None
         if header.negation:
-            mnegation = parse_single_negation(infile, size)
+            mnegation = parse_single_negation(infile, current_model_parts.size)
             if mnegation is None:
                 break
             num_negation += 1
 
-        process_orders(infile, header, size, carrier_set, num_negation, mnegation)
+        current_model_parts.num_negation = num_negation
+        current_model_parts.mnegation = mnegation
+
+        process_orders(infile, header, current_model_parts, solutions)
 
         if not header.negation:
             break
 
-def process_orders(infile: SourceFile, header: UglyHeader, size: int, carrier_set: Set[ModelValue], num_negation: int, mnegation: Optional[ModelFunction]):
+def process_orders(infile: SourceFile, header: UglyHeader, current_model_parts: ModelBuilder, solutions: List[Tuple[Model, Dict]]):
     """Stage 3"""
     num_order = 0
     while True:
-        result = parse_single_order(infile, size)
+        result = parse_single_order(infile, current_model_parts.size)
         if result is None:
             break
-        mconjunction, mdisjunction = result
         num_order += 1
-        process_designateds(infile, header, size, carrier_set, num_negation, mnegation, num_order, mconjunction, mdisjunction)
+        mconjunction, mdisjunction = result
+        current_model_parts.num_order = num_order
+        current_model_parts.mconjunction = mconjunction
+        current_model_parts.mdisjunction = mdisjunction
+        process_designateds(infile, header, current_model_parts, solutions)
 
-def process_designateds(infile: SourceFile, header: UglyHeader, size: int, carrier_set: Set[ModelValue], num_negation: int, mnegation: Optional[ModelFunction], num_order: int, mconjunction: Optional[ModelFunction], mdisjunction: Optional[ModelFunction]):
+def process_designateds(infile: SourceFile, header: UglyHeader, current_model_parts: ModelBuilder, solutions: List[Tuple[Model, Dict]]):
     """Stage 4"""
     num_designated = 0
     while True:
-        designated_values = parse_single_designated(infile, size)
+        designated_values = parse_single_designated(infile, current_model_parts.size)
         if designated_values is None:
             break
         num_designated += 1
-        process_implications(infile, header, size, carrier_set, num_negation, mnegation, num_order, mconjunction, mdisjunction, num_designated, designated_values)
+        current_model_parts.num_designated = num_designated
+        current_model_parts.designated_values = designated_values
+        process_implications(infile, header, current_model_parts, solutions)
 
 def process_implications(
-    infile: SourceFile, header: UglyHeader, size: int, carrier_set: Set[ModelValue], num_negation: int, mnegation: Optional[ModelFunction],
-    num_order: int, mconjunction: Optional[ModelFunction], mdisjunction: Optional[ModelFunction], num_designated: int, designated_values: Set[ModelValue]):
+    infile: SourceFile, header: UglyHeader, current_model_parts: ModelBuilder, solutions: List[Tuple[Model, Dict]]):
     """Stage 5"""
-    results = parse_implications(infile, size)
+    results = parse_implications(infile, current_model_parts.size)
     for num_implication, mimplication in enumerate(results, 1):
-        process_model(size, carrier_set, num_negation, mnegation, num_order, mconjunction, mdisjunction, num_designated, designated_values, num_implication, mimplication)
+        current_model_parts.num_implication = num_implication
+        current_model_parts.mimplication = mimplication
+        process_model(current_model_parts, solutions)
 
-def process_model(
-    size: int, carrier_set: Set[ModelValue], num_negation: int, mnegation: Optional[ModelFunction],
-    num_order: int, mconjunction: Optional[ModelFunction], mdisjunction: Optional[ModelFunction], num_designated: int,
-    designated_values: Set[ModelValue], num_implication: int, mimplication: ModelFunction):
+def process_model(mp: ModelBuilder, solutions: List[Tuple[Model, Dict]]):
     """Create Model"""
-    global solutions
+    assert mp.mimplication is not None
+    assert len(mp.carrier_set) > 0
 
-    logical_operations = { mimplication }
-    model_name = f"{size}{'.' + str(num_negation) if num_negation != 0 else ''}.{num_order}.{num_designated}.{num_implication}"
-    model = Model(carrier_set, logical_operations, designated_values, name=model_name)
+    logical_operations = { mp.mimplication }
+    model_name = f"{mp.size}{'.' + str(mp.num_negation) if mp.num_negation != 0 else ''}.{mp.num_order}.{mp.num_designated}.{mp.num_implication}"
+    model = Model(mp.carrier_set, logical_operations, mp.designated_values, name=model_name)
     interpretation = {
-        Implication: mimplication
+        Implication: mp.mimplication
     }
-    if mnegation is not None:
-        logical_operations.add(mnegation)
-        interpretation[Negation] = mnegation
-    if mconjunction is not None:
-        logical_operations.add(mconjunction)
-        interpretation[Conjunction] = mconjunction
-    if mdisjunction is not None:
-        logical_operations.add(mdisjunction)
-        interpretation[Disjunction] = mdisjunction
+    if mp.mnegation is not None:
+        logical_operations.add(mp.mnegation)
+        interpretation[Negation] = mp.mnegation
+    if mp.mconjunction is not None:
+        logical_operations.add(mp.mconjunction)
+        interpretation[Conjunction] = mp.mconjunction
+    if mp.mdisjunction is not None:
+        logical_operations.add(mp.mdisjunction)
+        interpretation[Disjunction] = mp.mdisjunction
 
     solutions.append((model, interpretation))
     print(f"Parsed Matrix {model.name}")
@@ -343,7 +364,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="VSP Checker")
     parser.add_argument("--verbose", action='store_true', help="Print out all parsed matrices")
     args = vars(parser.parse_args())
-    parse_matrices(SourceFile(sys.stdin))
+    solutions = parse_matrices(SourceFile(sys.stdin))
     print(f"Parsed {len(solutions)} matrices")
     num_has_vsp = 0
     for i, (model, interpretation) in enumerate(solutions):
