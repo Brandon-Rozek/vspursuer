@@ -346,8 +346,14 @@ if __name__ == "__main__":
     args = vars(parser.parse_args())
     parse_matrices(SourceFile(sys.stdin))
     print(f"Parsed {len(solutions)} matrices")
+    num_has_vsp = 0
     for i, (model, interpretation) in enumerate(solutions):
         vsp_result = has_vsp(model, interpretation)
         print(vsp_result)
+
         if args['verbose'] or vsp_result.has_vsp:
             print(model)
+
+        if vsp_result.has_vsp:
+            num_has_vsp += 1
+    print(f"Tested {len(solutions)} models, {num_has_vsp} of which satisfy VSP")
