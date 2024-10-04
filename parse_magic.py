@@ -102,7 +102,7 @@ def process_model(
     global solutions
 
     logical_operations = { mimplication }
-    model_name = f"{size}{"." + str(num_negation) if num_negation != 0 else ""}.{num_order}.{num_designated}.{num_implication}"
+    model_name = f"{size}{'.' + str(num_negation) if num_negation != 0 else ''}.{num_order}.{num_designated}.{num_implication}"
     model = Model(carrier_set, logical_operations, designated_values, name=model_name)
     interpretation = {
         Implication: mimplication
