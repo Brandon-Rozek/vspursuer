@@ -127,7 +127,6 @@ def parse_header(infile: SourceFile) -> UglyHeader:
     """
     header_line = next(infile).strip()
     header_tokens = header_line.split(" ")
-    print(header_tokens)
     assert header_tokens[0] in ["0", "1"]
     assert header_tokens[6] in ["0", "1"]
     negation_defined = bool(int(header_tokens[0]))
