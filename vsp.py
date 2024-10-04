@@ -8,7 +8,7 @@ from common import set_to_str
 from model import (
     Model, model_closure, ModelFunction, ModelValue
 )
-from logic import Implication, Operation
+from logic import Conjunction, Disjunction, Implication, Operation
 
 def preseed(
         initial_set: Set[ModelValue],
@@ -38,6 +38,33 @@ def preseed(
     same_set = candidate_preseed[1] == 0
     return candidate_preseed[0], same_set
 
+def has_top_bottom(subalgebra: Set[ModelValue], mconjunction: Optional[ModelFunction], mdisjunction: Optional[ModelFunction]):
+    """
+    Checks the subalgebra to see whether it
+    contains a top or bottom element.
+
+    Note: This does not compute the closure.
+
+    By definition,
+    The top element is any element x where x || x = x
+    The bottom element is any element x where x && x = x
+    """
+    if mconjunction is None or mdisjunction is None:
+        return False
+
+    for x in subalgebra:
+        if mconjunction(x, x) == x:
+            # print("Bottom Element Found")
+            return True
+
+        if mdisjunction(x, x) == x:
+            # print("Top Element Found")
+            return True
+
+    return False
+
+
+
 class VSP_Result:
     def __init__(
             self, has_vsp: bool, model_name: Optional[str] = None,
@@ -62,6 +89,8 @@ def has_vsp(model: Model, interpretation: Dict[Operation, ModelFunction]) -> VSP
     sharing property.
     """
     impfunction = interpretation[Implication]
+    mconjunction = interpretation.get(Conjunction)
+    mdisjunction = interpretation.get(Disjunction)
 
     # Compute I the set of tuples (x, y) where
     # x -> y does not take a designiated value
@@ -96,9 +125,15 @@ def has_vsp(model: Model, interpretation: Dict[Operation, ModelFunction]) -> VSP
 
 
         # NOTE: Optimziation before model_closure
-        # If the carrier set intersects, then move on to the next
-        # subalgebra
+        # If the two subalgebras intersect, move
+        # onto the next pair
         if len(xs & ys) > 0:
+            continue
+
+        # NOTE: Optimization
+        # if either subalgebra contains top or bottom, move
+        # onto the next pair
+        if has_top_bottom(xs, mconjunction, mdisjunction) or has_top_bottom(ys, mconjunction, mdisjunction):
             continue
 
         # Compute the closure of all operations
