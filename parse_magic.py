@@ -304,6 +304,7 @@ if __name__ == "__main__":
     solutions: List[Model] = parse_matrices(SourceFile(sys.stdin))
     print(f"Parsed {len(solutions)} matrices")
     for i, (model, interpretation) in enumerate(solutions):
-        if args['verbose']:
+        vsp_result = has_vsp(model, interpretation)
+        print(vsp_result)
+        if args['verbose'] or vsp_result.has_vsp:
             print(model)
-        print(has_vsp(model, interpretation))
