@@ -3,6 +3,7 @@ Parses the Magic Ugly Data File Format
 
 Assumes the base logic is R with no extra connectives
 """
+import argparse
 import sys
 from typing import TextIO, List, Optional, Tuple, Set, Dict
 
@@ -297,8 +298,12 @@ def parse_implication(infile: TextIO, size: int) -> Optional[List[ModelFunction]
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="VSP Checker")
+    parser.add_argument("--verbose", action='store_true', help="Print out all parsed matrices")
+    args = vars(parser.parse_args())
     solutions: List[Model] = parse_matrices(SourceFile(sys.stdin))
     print(f"Parsed {len(solutions)} matrices")
     for i, (model, interpretation) in enumerate(solutions):
-        print(model)
+        if args['verbose']:
+            print(model)
         print(has_vsp(model, interpretation))
