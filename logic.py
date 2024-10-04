@@ -66,6 +66,7 @@ Negation = Operation("¬", 1)
 Conjunction = Operation("∧", 2)
 Disjunction = Operation("∨", 2)
 Implication = Operation("→", 2)
+Necessitation = Operation("!", 1)
 
 class Inequation:
     def __init__(self, antecedant : Term, consequent: Term):
