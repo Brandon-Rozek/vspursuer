@@ -19,3 +19,8 @@ Extends R to have necessitation with the following additional axioms:
 3) (!p & !q) -> !(p & q)
 
 Output contains all satisfiable models up to size 3.
+
+## R5-S5
+
+Extends R with axioms that classically are adequate for S5 giving rise to an R-ish version of S5 with necessitation.
+
