@@ -58,14 +58,13 @@ def parse_matrices(infile: SourceFile) -> List[Tuple[Model, Dict]]:
 def process_sizes(infile: SourceFile, header: UglyHeader, current_model_parts: ModelBuilder, solutions: List[Tuple[Model, Dict]]):
     """Stage 1"""
 
-    # NOTE: In R3-PN the first size line is -1?
-    if header.necessitation:
-        next(infile)
+    first_run = True
 
     while True:
         print("Processing next size")
         try:
-            size = parse_size(infile)
+            size = parse_size(infile, first_run)
+            first_run = False
         except StopIteration:
             # For some reason, when necessitation is enabled this doesn't
             # have a -1 on the last line
@@ -219,11 +218,15 @@ def carrier_set_from_size(size: int):
         mvalue_from_index(i) for i in range(size + 1)
     }
 
-def parse_size(infile: SourceFile) -> Optional[int]:
+def parse_size(infile: SourceFile, first_run: bool) -> Optional[int]:
     """
     Parse the line representing the matrix size.
     """
     size = int(next(infile))
+    # HACK: The first size line may be -1 due to a bug. Skip it
+    if size == -1 and first_run:
+        size = int(next(infile))
+
     if size == -1:
         return None
     assert size > 0, f"Unexpected size at line {infile.current_line}"
