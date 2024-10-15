@@ -1,4 +1,4 @@
-# Matmod: Verify Relevance Properties for Matrix Models with Implicative Connectives
+# VSPursuer: Verify Relevance Properties for Matrix Models with Implicative Connectives
 
 Interested in seeing which satisfiable models from [arranstewart/magic](https://github.com/arranstewart/magic) have the variable sharing property?
 
