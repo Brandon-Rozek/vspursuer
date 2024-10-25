@@ -28,9 +28,10 @@ class SourceFile:
         return contents
 
 class UglyHeader:
-    def __init__(self, negation: bool, necessitation: bool):
+    def __init__(self, negation: bool, necessitation: bool, custom_model_functions: List[Tuple[int, str]]):
         self.negation = negation
         self.necessitation = necessitation
+        self.custom_model_functions = custom_model_functions
 
 class ModelBuilder:
     def __init__(self):
@@ -199,15 +200,21 @@ def process_model(mp: ModelBuilder, solutions: List[Tuple[Model, Dict]]):
 def parse_header(infile: SourceFile) -> UglyHeader:
     """
     Parse the header line from the ugly data format.
-    NOTE: Currently Incomplete.
     """
     header_line = next(infile).strip()
     header_tokens = header_line.split(" ")
     assert header_tokens[0] in ["0", "1"]
     assert header_tokens[6] in ["0", "1"]
+    assert len(header_tokens) >= 7
     negation_defined = bool(int(header_tokens[0]))
     necessitation_defined = bool(int(header_tokens[6]))
-    return UglyHeader(negation_defined, necessitation_defined)
+    num_custom_connectives = int(header_tokens[7])
+    custom_model_functions: List[Tuple[int, str]] = []
+    for i in range(num_custom_connectives):
+        arity = int(header_tokens[7 + (2 * i) + 1])
+        symbol = header_tokens[7 + (2 * i) + 2]
+        custom_model_functions.append((arity, symbol))
+    return UglyHeader(negation_defined, necessitation_defined, custom_model_functions)
 
 def carrier_set_from_size(size: int):
     """
