@@ -21,11 +21,18 @@ class SourceFile:
     def __init__(self, fileobj: TextIO):
         self.fileobj = fileobj
         self.current_line = 0
+        self.reststr = ""
 
     def __next__(self):
+        if self.reststr != "":
+            return self.reststr
+
         contents = next(self.fileobj)
         self.current_line += 1
         return contents
+
+    def set_reststr(self, reststr: str):
+        self.reststr = reststr
 
 class UglyHeader:
     def __init__(self, negation: bool, necessitation: bool, custom_model_functions: List[Tuple[int, str]]):
@@ -48,135 +55,212 @@ class ModelBuilder:
         self.mimplication: Optional[ModelFunction] = None
         self.num_necessitation: int = 0
         self.mnecessitation: Optional[ModelFunction] = None
+        self.custom_model_functions: List[Tuple[int, ModelFunction]]
+
+class Stage:
+    def __init__(self, name: str):
+        self.name = name
+        self.next: Optional['Stage'] = None
+        self.previous: Optional['Stage'] = None
+    def __str__(self):
+        return self.name
+
+class Stages:
+    def __init__(self):
+        self.stages: Dict[str, Stage] = {}
+        self.last_stage: Optional[Stage] = None
+    def add(self, name: str):
+        stage = Stage(name)
+        stage.next = stage
+        if self.last_stage is not None:
+            stage.previous = self.last_stage
+            self.last_stage.next = stage
+        else:
+            stage.previous = Stage("end")
+
+        self.stages[name] = stage
+        self.last_stage = stage
+    def next_stage(self, name):
+        return self.stages[name].next
+    def previous_stage(self, name):
+        return self.stages[name].previous
+    def get(self, name):
+        return self.stages[name]
+
+def derive_stages(header: UglyHeader) -> Stages:
+    stages = Stages()
+    stages.add("size")
+    if header.negation:
+        stages.add("negation")
+    stages.add("order")
+    stages.add("designated")
+    stages.add("implication")
+    if header.necessitation:
+        stages.add("necessitation")
+    # TODO: Can't use -- as that can be a custom symbol
+    # for (acidity, symbol) in header.custom_model_functions:
+        # stages.add(f"custom--{acidity}--{symbol}")
+    stages.add("process_model")
+
+    # After processing the model, go to the previous stage
+    stages.get("process_model").next = stages.get("process_model").previous
+
+    return stages
+
 
 def parse_matrices(infile: SourceFile) -> List[Tuple[Model, Dict]]:
     solutions = [] # Reset
     header = parse_header(infile)
+    stages = derive_stages(header)
+    first_run = True
     current_model_parts = ModelBuilder()
-    process_sizes(infile, header, current_model_parts, solutions)
+    stage = stages.get("size")
+    while True:
+        print("Current stage:", stage)
+        match stage.name:
+            case "end":
+                break
+            case "process_model":
+                process_model(current_model_parts, solutions)
+                stage = stage.next
+            case "size":
+                processed = process_sizes(infile, current_model_parts, first_run)
+                first_run = False
+                stage = stage.next if processed else stage.previous
+            case "negation":
+                processed = process_negations(infile, current_model_parts)
+                stage = stage.next if processed else stage.previous
+            case "order":
+                processed = process_orders(infile, current_model_parts)
+                stage = stage.next if processed else stage.previous
+            case "designated":
+                processed = process_designateds(infile, current_model_parts)
+                stage = stage.next if processed else stage.previous
+            case "implication":
+                processed = process_implications(infile, current_model_parts)
+                stage = stage.next if processed else stage.previous
+            case "necessitation":
+                processed = process_necessitations(infile, current_model_parts)
+                stage = stage.next if processed else stage.previous
+            case _:
+                raise NotImplementedError("Custom Connectives are not yet supported")
+
     return solutions
 
-def process_sizes(infile: SourceFile, header: UglyHeader, current_model_parts: ModelBuilder, solutions: List[Tuple[Model, Dict]]):
-    """Stage 1"""
+def process_sizes(infile: SourceFile, current_model_parts: ModelBuilder, first_run: bool) -> bool:
+    try:
+        size = parse_size(infile, first_run)
+    except StopIteration:
+        return False
+    if size is None:
+        return False
 
-    first_run = True
+    carrier_set = carrier_set_from_size(size)
+    current_model_parts.size = size
+    current_model_parts.carrier_set = carrier_set
 
-    while True:
-        print("Processing next size")
-        try:
-            size = parse_size(infile, first_run)
-            first_run = False
-        except StopIteration:
-            # For some reason, when necessitation is enabled this doesn't
-            # have a -1 on the last line
-            break
-        if size is None:
-            break
+    # Reset counts
+    current_model_parts.num_negation = 0
+    current_model_parts.num_order = 0
+    current_model_parts.num_designated = 0
+    current_model_parts.num_implication = 0
+    current_model_parts.num_necessitation = 0
 
-        carrier_set = carrier_set_from_size(size)
-        current_model_parts.size = size
-        current_model_parts.carrier_set = carrier_set
-        process_negations(infile, header, current_model_parts, solutions)
+    return True
 
-def process_negations(infile: SourceFile, header: UglyHeader, current_model_parts: ModelBuilder, solutions: List[Tuple[Model, Dict]]):
+def process_negations(infile: SourceFile, current_model_parts: ModelBuilder) -> bool:
     """Stage 2 (Optional)"""
-    num_negation = 0
-    while True:
-        print("Processing next negation")
-        mnegation = None
-        if header.negation:
-            mnegation = parse_single_negation(infile, current_model_parts.size)
-            if mnegation is None:
-                break
-            num_negation += 1
+    mnegation = parse_single_negation(infile, current_model_parts.size)
+    if mnegation is None:
+        return False
 
-        current_model_parts.num_negation = num_negation
-        current_model_parts.mnegation = mnegation
+    current_model_parts.num_negation += 1
+    current_model_parts.mnegation = mnegation
 
-        process_orders(infile, header, current_model_parts, solutions)
+    # Reset counts
+    current_model_parts.num_order = 0
+    current_model_parts.num_designated = 0
+    current_model_parts.num_implication = 0
+    current_model_parts.num_necessitation = 0
 
-        if not header.negation:
-            break
+    return True
 
-def process_orders(infile: SourceFile, header: UglyHeader, current_model_parts: ModelBuilder, solutions: List[Tuple[Model, Dict]]):
+def process_orders(infile: SourceFile, current_model_parts: ModelBuilder) -> bool:
     """Stage 3"""
-    num_order = 0
-    while True:
-        print("Processing next order")
-        result = parse_single_order(infile, current_model_parts.size)
-        if result is None:
-            break
-        num_order += 1
-        mconjunction, mdisjunction = result
-        current_model_parts.num_order = num_order
-        current_model_parts.mconjunction = mconjunction
-        current_model_parts.mdisjunction = mdisjunction
-        process_designateds(infile, header, current_model_parts, solutions)
+    result = parse_single_order(infile, current_model_parts.size)
+    if result is None:
+        return False
 
-def process_designateds(infile: SourceFile, header: UglyHeader, current_model_parts: ModelBuilder, solutions: List[Tuple[Model, Dict]]):
+    mconjunction, mdisjunction = result
+    current_model_parts.num_order += 1
+    current_model_parts.mconjunction = mconjunction
+    current_model_parts.mdisjunction = mdisjunction
+
+    # Reset counts
+    current_model_parts.num_designated = 0
+    current_model_parts.num_implication = 0
+    current_model_parts.num_necessitation = 0
+
+    return True
+
+def process_designateds(infile: SourceFile, current_model_parts: ModelBuilder) -> bool:
     """Stage 4"""
-    num_designated = 0
-    while True:
-        print("Processing next designated")
-        designated_values = parse_single_designated(infile, current_model_parts.size)
-        if designated_values is None:
-            break
-        num_designated += 1
-        current_model_parts.num_designated = num_designated
-        current_model_parts.designated_values = designated_values
-        process_implications(infile, header, current_model_parts, solutions)
+    designated_values = parse_single_designated(infile, current_model_parts.size)
+    if designated_values is None:
+        return False
 
-def process_implications(
-    infile: SourceFile, header: UglyHeader, current_model_parts: ModelBuilder, solutions: List[Tuple[Model, Dict]]):
+    current_model_parts.num_designated += 1
+    current_model_parts.designated_values = designated_values
+
+    # Reset counts
+    current_model_parts.num_implication = 0
+    current_model_parts.num_necessitation = 0
+
+    return True
+
+def process_implications(infile: SourceFile, current_model_parts: ModelBuilder) -> bool:
     """Stage 5"""
-    if header.necessitation:
-        num_implication = 0
-        while True:
-            print("Processing next implication")
-            instr = next(infile).strip()
-            mimplication, reststr = parse_single_implication(instr, infile.current_line, current_model_parts.size)
-            if mimplication is None:
-                break
-            num_implication += 1
-            current_model_parts.num_implication = num_implication
-            current_model_parts.mimplication = mimplication
-            process_necessitations(infile, reststr, header, current_model_parts, solutions)
-    else:
-        results = parse_implications(infile, current_model_parts.size)
-        for num_implication, mimplication in enumerate(results, 1):
-            current_model_parts.num_implication = num_implication
-            current_model_parts.mimplication = mimplication
-            process_model(current_model_parts, solutions)
+    if infile.reststr == "":
+        infile.reststr = next(infile).strip()
 
-def process_necessitations(infile: SourceFile, instr: str, header: UglyHeader, current_model_parts: ModelBuilder, solutions: List[Tuple[Model, Dict]]):
+    mimplication, reststr = parse_single_implication(infile.reststr, infile.current_line, current_model_parts.size)
+    infile.reststr = reststr
+    if mimplication is None:
+        return False
 
-    # NOTE: For some reason, one necessitation table will be on the same line as the implication table
-    mnecessitation = parse_single_necessitation_from_str(instr, infile.current_line, current_model_parts.size)
-    assert mnecessitation is not None, f"Expected Necessitation Table at line {infile.current_line}"
-    num_necessitation = 1
+    current_model_parts.num_implication += 1
+    current_model_parts.mimplication = mimplication
 
-    current_model_parts.num_necessitation = num_necessitation
+     # Reset counts
+    current_model_parts.num_necessitation = 0
+
+    return True
+
+def process_necessitations(infile: SourceFile, current_model_parts: ModelBuilder) -> bool:
+    # TODO: In progress
+    if infile.reststr != "":
+        infile.reststr = next(infile).strip()
+
+    # TODO: This should match the implication way of doing things when
+    # custom conenctives are involved (returning reststr)
+    mnecessitation, reststr = parse_single_necessitation_from_str(infile.reststr, infile.current_line, current_model_parts.size)
+    infile.reststr = reststr
+    if mnecessitation is None:
+        return False
+
+    current_model_parts.num_necessitation += 1
     current_model_parts.mnecessitation = mnecessitation
-    process_model(current_model_parts, solutions)
 
-    while True:
-        print("Processing next necessitation")
-        mnecessitation = parse_single_necessitation(infile, current_model_parts.size)
-        if mnecessitation is None:
-            break
-        num_necessitation += 1
-
-        current_model_parts.num_necessitation = num_necessitation
-        current_model_parts.mnecessitation = mnecessitation
-        process_model(current_model_parts, solutions)
+    return True
 
 def process_model(mp: ModelBuilder, solutions: List[Tuple[Model, Dict]]):
     """Create Model"""
     assert mp.mimplication is not None
     assert len(mp.carrier_set) > 0
+    assert mp.size + 1 == len(mp.carrier_set)
 
     logical_operations = { mp.mimplication }
-    model_name = f"{mp.size}{'.' + str(mp.num_negation) if mp.num_negation != 0 else ''}.{mp.num_order}.{mp.num_designated}.{mp.num_implication}{'.' + str(mp.num_necessitation) if mp.num_necessitation != 0 else ''}"
+    model_name = f"{mp.size + 1}{'.' + str(mp.num_negation) if mp.num_negation != 0 else ''}.{mp.num_order}.{mp.num_designated}.{mp.num_implication}{'.' + str(mp.num_necessitation) if mp.num_necessitation != 0 else ''}"
     model = Model(mp.carrier_set, logical_operations, mp.designated_values, name=model_name)
     interpretation = {
         Implication: mp.mimplication
@@ -216,7 +300,7 @@ def parse_header(infile: SourceFile) -> UglyHeader:
         custom_model_functions.append((arity, symbol))
     return UglyHeader(negation_defined, necessitation_defined, custom_model_functions)
 
-def carrier_set_from_size(size: int):
+def carrier_set_from_size(size: int) -> Set[ModelValue]:
     """
     Construct a carrier set of model values
     based on the desired size.
@@ -261,8 +345,7 @@ def parse_single_negation(infile: SourceFile, size: int) -> Optional[ModelFuncti
 
     return ModelFunction(1, mapping, "¬")
 
-
-def mvalue_from_index(i: int):
+def mvalue_from_index(i: int) -> ModelValue:
     """
     Given an index, return the
     representation of the model value.
@@ -394,7 +477,6 @@ def parse_single_designated(infile: SourceFile, size: int) -> Optional[Set[Model
 
     return designated_values
 
-
 def parse_single_implication(instr: str, line: int, size: int) -> Tuple[ModelFunction, str]:
     """
     Take the current string, parse an implication table from it,
@@ -423,40 +505,6 @@ def parse_single_implication(instr: str, line: int, size: int) -> Tuple[ModelFun
     reststr = " ".join(table[(size + 1)**2:])
     return mimplication, reststr
 
-
-def parse_implications(infile: SourceFile, size: int) -> List[ModelFunction]:
-    """
-    Parse the line representing the list of implication
-    tables.
-    """
-    line = next(infile).strip()
-
-    # Split and remove the last '-1' character
-    table = line.split(" ")[:-1]
-
-    assert len(table) % (size + 1)**2 == 0, f"Implication table does not match expected size at line {infile.current_line}"
-
-    table_i = 0
-    mimplications: List[ModelFunction] = []
-
-    for _ in range(len(table) // (size + 1)**2):
-        mapping = {}
-
-        for i in range(size + 1):
-            x = mvalue_from_index(i)
-            for j in range(size + 1):
-                y = mvalue_from_index(j)
-
-                r = parse_mvalue(table[table_i])
-                table_i += 1
-
-                mapping[(x, y)] = r
-
-        mimplication = ModelFunction(2, mapping, "→")
-        mimplications.append(mimplication)
-
-    return mimplications
-
 def parse_single_necessitation_from_str(instr: str, line: int, size: int) -> Optional[ModelFunction]:
     """
     Parse the line representing the necessitation table.
@@ -465,7 +513,7 @@ def parse_single_necessitation_from_str(instr: str, line: int, size: int) -> Opt
         return None
 
     row = instr.split(" ")
-    assert len(row) == size + 1, f"Necessitation table doesn't match size at line {line}"
+    assert len(row) >= size + 1, f"Necessitation table doesn't match size at line {line}"
     mapping = {}
 
     for i, j in zip(range(size + 1), row):
@@ -473,11 +521,10 @@ def parse_single_necessitation_from_str(instr: str, line: int, size: int) -> Opt
         y = parse_mvalue(j)
         mapping[(x, )] = y
 
-    return ModelFunction(1, mapping, "!")
+    mnecessitation = ModelFunction(1, mapping, "!")
+    reststr = " ".join(row[(size + 1):])
 
-def parse_single_necessitation(infile: SourceFile, size: int) -> Optional[ModelFunction]:
-    line = next(infile).strip()
-    return parse_single_necessitation_from_str(line, infile.current_line, size)
+    return mnecessitation, reststr
 
 
 if __name__ == "__main__":
