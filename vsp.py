@@ -38,31 +38,38 @@ def preseed(
     same_set = candidate_preseed[1] == 0
     return candidate_preseed[0], same_set
 
-def has_top_bottom(subalgebra: Set[ModelValue], mconjunction: Optional[ModelFunction], mdisjunction: Optional[ModelFunction]):
+
+def find_top(algebra: Set[ModelValue], mconjunction: Optional[ModelFunction], mdisjunction: Optional[ModelFunction]) -> Optional[ModelValue]:
     """
-    Checks the subalgebra to see whether it
-    contains a top or bottom element.
-
-    Note: This does not compute the closure.
-
-    By definition,
-    The top element is any element x where x || x = x
-    The bottom element is any element x where x && x = x
+    Find the top of the order lattice.
+    T || a = T, T && a = a for all a in the carrier set
     """
     if mconjunction is None or mdisjunction is None:
-        return False
+        return None
 
-    for x in subalgebra:
-        if mconjunction(x, x) == x:
-            # print("Bottom Element Found")
-            return True
+    for x in algebra:
+        for y in algebra:
+            if mdisjunction(x, y) == x and mconjunction(x, y) == y:
+                return x
 
-        if mdisjunction(x, x) == x:
-            # print("Top Element Found")
-            return True
+    print("[Warning] Failed to find the top of the lattice")
+    return None
 
-    return False
+def find_bottom(algebra: Set[ModelValue], mconjunction: Optional[ModelFunction], mdisjunction: Optional[ModelFunction]) -> Optional[ModelValue]:
+    """
+    Find the bottom of the order lattice
+    F || a = a, F && a = F for all a in the carrier set
+    """
+    if mconjunction is None or mdisjunction is None:
+        return None
 
+    for x in algebra:
+        for y in algebra:
+            if mdisjunction(x, y) == y and mconjunction(x, y) == x:
+                return x
+
+    print("[Warning] Failed to find the bottom of the lattice")
+    return None
 
 
 class VSP_Result:
@@ -91,6 +98,8 @@ def has_vsp(model: Model, interpretation: Dict[Operation, ModelFunction]) -> VSP
     impfunction = interpretation[Implication]
     mconjunction = interpretation.get(Conjunction)
     mdisjunction = interpretation.get(Disjunction)
+    top = find_top(model.carrier_set, mconjunction, mdisjunction)
+    bottom = find_bottom(model.carrier_set, mconjunction, mdisjunction)
 
     # Compute I the set of tuples (x, y) where
     # x -> y does not take a designiated value
@@ -133,7 +142,9 @@ def has_vsp(model: Model, interpretation: Dict[Operation, ModelFunction]) -> VSP
         # NOTE: Optimization
         # if either subalgebra contains top or bottom, move
         # onto the next pair
-        if has_top_bottom(xs, mconjunction, mdisjunction) or has_top_bottom(ys, mconjunction, mdisjunction):
+        if top is not None and (top in xs or top in ys):
+            continue
+        if bottom is not None and (bottom in xs or bottom in ys):
             continue
 
         # Compute the closure of all operations
