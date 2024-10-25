@@ -229,10 +229,13 @@ def parse_size(infile: SourceFile, first_run: bool) -> Optional[int]:
     """
     Parse the line representing the matrix size.
     """
+
     size = int(next(infile))
-    # HACK: The first size line may be -1 due to a bug. Skip it
-    if size == -1 and first_run:
-        size = int(next(infile))
+    # HACK: When necessitation and custom connectives are enabled
+    # MaGIC may produce -1s at the beginning of the file
+    if first_run:
+        while size == -1:
+            size = int(next(infile))
 
     if size == -1:
         return None
