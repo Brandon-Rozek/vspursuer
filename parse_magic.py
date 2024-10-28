@@ -62,16 +62,11 @@ class ModelBuilder:
     def __init__(self):
         self.size : int = 0
         self.carrier_set : Set[ModelValue] = set()
-        self.num_negation: int = 0
         self.mnegation: Optional[ModelFunction] = None
-        self.num_order: int = 0
         self.mconjunction: Optional[ModelFunction] = None
         self.mdisjunction: Optional[ModelFunction] = None
-        self.num_designated: int = 0
         self.designated_values: Set[ModelValue] = set()
-        self.num_implication: int = 0
         self.mimplication: Optional[ModelFunction] = None
-        self.num_necessitation: int = 0
         self.mnecessitation: Optional[ModelFunction] = None
         self.custom_model_functions: Dict[str,  ModelFunction] = {}
 
@@ -80,33 +75,81 @@ class Stage:
         self.name = name
         self.next: Optional['Stage'] = None
         self.previous: Optional['Stage'] = None
+        self.num = 0
+
+    def increment(self):
+        self.num += 1
+
+    def reset(self):
+        self.num = 0
+
     def __str__(self):
         return self.name
 
 class Stages:
     def __init__(self):
         self.stages: Dict[str, Stage] = {}
-        self.last_stage: Optional[Stage] = None
+        self.last_added_stage: Optional[Stage] = None
+        self.first_stage: Optional[Stage] = None
+
     def add(self, name: str):
         stage = Stage(name)
         stage.next = stage
 
-        if self.last_stage is not None:
-            stage.previous = self.last_stage
-            self.last_stage.next = stage
+        if self.last_added_stage is not None:
+            stage.previous = self.last_added_stage
+            self.last_added_stage.next = stage
         else:
             # The previous of the first stage
             # is the end
+            self.first_stage = stage
             stage.previous = Stage("end")
 
         self.stages[name] = stage
-        self.last_stage = stage
+        self.last_added_stage = stage
+
     def next_stage(self, name):
         return self.stages[name].next
+
     def previous_stage(self, name):
         return self.stages[name].previous
+
+    def reset_after(self, name):
+        stage = self.stages[name]
+        stage.reset()
+        if stage.next.name == "process_model":
+            return
+        next_stage = stage.next
+        while next_stage is not None:
+            next_stage.reset()
+            if next_stage.next.name == "process_model":
+                next_stage = None
+            else:
+                next_stage = next_stage.next
+
     def get(self, name):
         return self.stages[name]
+
+    def name(self):
+        result = ""
+        stage = self.first_stage
+        if stage is None:
+            return ""
+
+        result = f"{stage.num}"
+        if stage.next == "process_model":
+            return result
+
+        stage = stage.next
+        while stage is not None:
+            result += f".{stage.num}"
+            if stage.next.name != "process_model":
+                stage = stage.next
+            else:
+                stage = None
+
+        return result
+
 
 def derive_stages(header: UglyHeader) -> Stages:
     stages = Stages()
@@ -135,49 +178,84 @@ def parse_matrices(infile: SourceFile) -> List[Tuple[Model, Dict]]:
     current_model_parts = ModelBuilder()
     stage = stages.get("size")
     while True:
-        print("Current stage:", stage)
         match stage.name:
             case "end":
                 break
             case "process_model":
-                process_model(current_model_parts, solutions)
+                process_model(stages.name(), current_model_parts, solutions)
                 stage = stage.next
             case "size":
                 processed = process_sizes(infile, current_model_parts, first_run)
                 first_run = False
-                stage = stage.next if processed else stage.previous
+                if processed:
+                    stage.num = current_model_parts.size + 1
+                    stage = stage.next
+                else:
+                    stages.reset_after(stage.name)
+                    stage = stage.previous
             case "negation":
                 processed = process_negations(infile, current_model_parts)
-                stage = stage.next if processed else stage.previous
+                if processed:
+                    stage.increment()
+                    stage = stage.next
+                else:
+                    stages.reset_after(stage.name)
+                    stage = stage.previous
             case "order":
                 processed = process_orders(infile, current_model_parts)
-                stage = stage.next if processed else stage.previous
+                if processed:
+                    stage.increment()
+                    stage = stage.next
+                else:
+                    stages.reset_after(stage.name)
+                    stage = stage.previous
             case "designated":
                 processed = process_designateds(infile, current_model_parts)
-                stage = stage.next if processed else stage.previous
+                if processed:
+                    stage.increment()
+                    stage = stage.next
+                else:
+                    stages.reset_after(stage.name)
+                    stage = stage.previous
             case "implication":
                 processed = process_implications(infile, current_model_parts)
-                stage = stage.next if processed else stage.previous
+                if processed:
+                    stage.increment()
+                    stage = stage.next
+                else:
+                    stages.reset_after(stage.name)
+                    stage = stage.previous
             case "necessitation":
                 processed = process_necessitations(infile, current_model_parts)
-                stage = stage.next if processed else stage.previous
+                if processed:
+                    stage.increment()
+                    stage = stage.next
+                else:
+                    stages.reset_after(stage.name)
+                    stage = stage.previous
             case _:
                 custom_stage = re.search(r"custom--(\d+)--(\S+)", stage.name)
                 if custom_stage is None or len(custom_stage.groups()) != 2:
                     raise NotImplementedError(f"Unrecognized Stage: {stage.name}")
                 adicity, symbol = custom_stage.groups()
                 adicity = int(adicity)
+                processed = True
                 if adicity == 0:
                     # We don't need to do anything here
                     stage = stage.next
                 elif adicity == 1:
-                    processed = process_monadic_connective(infile, symbol, current_model_parts)
-                    stage = stage.next if processed else stage.previous
+                    processed = process_custom_monadic_connective(infile, symbol, current_model_parts)
                 elif adicity == 2:
-                    processed = process_dyadic_connective(infile, symbol, current_model_parts)
-                    stage = stage.next if processed else stage.previous
+                    processed = process_custom_dyadic_connective(infile, symbol, current_model_parts)
                 else:
-                    raise NotImplementedError("Unable to process connectives of adicity greater than 2")
+                    raise NotImplementedError("Unable to process connectives of adicity greater than c2")
+
+                if processed:
+                    stage.increment()
+                    stage = stage.next
+                else:
+                    stages.reset_after(stage.name)
+                    stage = stage.previous
 
 
     return solutions
@@ -191,15 +269,8 @@ def process_sizes(infile: SourceFile, current_model_parts: ModelBuilder, first_r
         return False
 
     carrier_set = carrier_set_from_size(size)
-    current_model_parts.size = size
     current_model_parts.carrier_set = carrier_set
-
-    # Reset counts
-    current_model_parts.num_negation = 0
-    current_model_parts.num_order = 0
-    current_model_parts.num_designated = 0
-    current_model_parts.num_implication = 0
-    current_model_parts.num_necessitation = 0
+    current_model_parts.size = size
 
     return True
 
@@ -209,15 +280,7 @@ def process_negations(infile: SourceFile, current_model_parts: ModelBuilder) -> 
     if mnegation is None:
         return False
 
-    current_model_parts.num_negation += 1
     current_model_parts.mnegation = mnegation
-
-    # Reset counts
-    current_model_parts.num_order = 0
-    current_model_parts.num_designated = 0
-    current_model_parts.num_implication = 0
-    current_model_parts.num_necessitation = 0
-
     return True
 
 def process_orders(infile: SourceFile, current_model_parts: ModelBuilder) -> bool:
@@ -227,14 +290,8 @@ def process_orders(infile: SourceFile, current_model_parts: ModelBuilder) -> boo
         return False
 
     mconjunction, mdisjunction = result
-    current_model_parts.num_order += 1
     current_model_parts.mconjunction = mconjunction
     current_model_parts.mdisjunction = mdisjunction
-
-    # Reset counts
-    current_model_parts.num_designated = 0
-    current_model_parts.num_implication = 0
-    current_model_parts.num_necessitation = 0
 
     return True
 
@@ -244,13 +301,7 @@ def process_designateds(infile: SourceFile, current_model_parts: ModelBuilder) -
     if designated_values is None:
         return False
 
-    current_model_parts.num_designated += 1
     current_model_parts.designated_values = designated_values
-
-    # Reset counts
-    current_model_parts.num_implication = 0
-    current_model_parts.num_necessitation = 0
-
     return True
 
 def process_implications(infile: SourceFile, current_model_parts: ModelBuilder) -> bool:
@@ -259,12 +310,7 @@ def process_implications(infile: SourceFile, current_model_parts: ModelBuilder) 
     if mimplication is None:
         return False
 
-    current_model_parts.num_implication += 1
     current_model_parts.mimplication = mimplication
-
-     # Reset counts
-    current_model_parts.num_necessitation = 0
-
     return True
 
 def process_necessitations(infile: SourceFile, current_model_parts: ModelBuilder) -> bool:
@@ -272,12 +318,10 @@ def process_necessitations(infile: SourceFile, current_model_parts: ModelBuilder
     if mnecessitation is None:
         return False
 
-    current_model_parts.num_necessitation += 1
     current_model_parts.mnecessitation = mnecessitation
-
     return True
 
-def process_monadic_connective(infile: SourceFile, symbol: str, current_model_parts: ModelBuilder) -> bool:
+def process_custom_monadic_connective(infile: SourceFile, symbol: str, current_model_parts: ModelBuilder) -> bool:
     mfunction = parse_single_monadic_connective(infile, symbol, current_model_parts.size)
     if mfunction is None:
         return False
@@ -285,7 +329,7 @@ def process_monadic_connective(infile: SourceFile, symbol: str, current_model_pa
     current_model_parts.custom_model_functions[symbol] = mfunction
     return True
 
-def process_dyadic_connective(infile: SourceFile, symbol: str, current_model_parts: ModelBuilder) -> bool:
+def process_custom_dyadic_connective(infile: SourceFile, symbol: str, current_model_parts: ModelBuilder) -> bool:
     mfunction = parse_single_dyadic_connective(infile, symbol, current_model_parts.size)
     if mfunction is None:
         return False
@@ -293,13 +337,12 @@ def process_dyadic_connective(infile: SourceFile, symbol: str, current_model_par
     current_model_parts.custom_model_functions[symbol] = mfunction
     return True
 
-def process_model(mp: ModelBuilder, solutions: List[Tuple[Model, Dict]]):
+def process_model(model_name: str, mp: ModelBuilder,  solutions: List[Tuple[Model, Dict]]):
     """Create Model"""
     assert mp.mimplication is not None
     assert mp.size + 1 == len(mp.carrier_set)
 
     logical_operations = { mp.mimplication }
-    model_name = f"{mp.size + 1}{'.' + str(mp.num_negation) if mp.num_negation != 0 else ''}.{mp.num_order}.{mp.num_designated}.{mp.num_implication}{'.' + str(mp.num_necessitation) if mp.num_necessitation != 0 else ''}"
     model = Model(mp.carrier_set, logical_operations, mp.designated_values, name=model_name)
     interpretation = {
         Implication: mp.mimplication
@@ -318,10 +361,10 @@ def process_model(mp: ModelBuilder, solutions: List[Tuple[Model, Dict]]):
         interpretation[Necessitation] = mp.mnecessitation
 
     for custom_mf in mp.custom_model_functions.values():
-        if custom_mf is None:
+        if custom_mf is not None:
             logical_operations.add(custom_mf)
-        # NOTE: No need to assign interpretation
-        # for VSP check
+            # NOTE: No need to assign interpretation
+            # for VSP check
 
     solutions.append((model, interpretation))
     print(f"Parsed Matrix {model.name}")
