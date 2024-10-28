@@ -23,13 +23,30 @@ class SourceFile:
         self.current_line = 0
         self.reststr = ""
 
-    def __next__(self):
+    def next_line(self):
         if self.reststr != "":
-            return self.reststr
+            reststr = self.reststr
+            self.reststr = ""
+            return reststr
 
-        contents = next(self.fileobj)
+        contents = next(self.fileobj).strip()
         self.current_line += 1
         return contents
+
+    def __next__(self):
+        """
+        Grabs the next word token from the stream
+        """
+        if self.reststr == "":
+            self.reststr = next(self.fileobj).strip()
+            self.current_line += 1
+
+        tokens = self.reststr.split(" ")
+        next_token = tokens[0]
+        self.reststr = " ".join(tokens[1:])
+
+        return next_token
+
 
     def set_reststr(self, reststr: str):
         self.reststr = reststr
@@ -220,11 +237,7 @@ def process_designateds(infile: SourceFile, current_model_parts: ModelBuilder) -
 
 def process_implications(infile: SourceFile, current_model_parts: ModelBuilder) -> bool:
     """Stage 5"""
-    if infile.reststr == "":
-        infile.reststr = next(infile).strip()
-
-    mimplication, reststr = parse_single_implication(infile.reststr, infile.current_line, current_model_parts.size)
-    infile.reststr = reststr
+    mimplication = parse_single_implication(infile, current_model_parts.size)
     if mimplication is None:
         return False
 
@@ -237,14 +250,7 @@ def process_implications(infile: SourceFile, current_model_parts: ModelBuilder) 
     return True
 
 def process_necessitations(infile: SourceFile, current_model_parts: ModelBuilder) -> bool:
-    # TODO: In progress
-    if infile.reststr != "":
-        infile.reststr = next(infile).strip()
-
-    # TODO: This should match the implication way of doing things when
-    # custom conenctives are involved (returning reststr)
-    mnecessitation, reststr = parse_single_necessitation_from_str(infile.reststr, infile.current_line, current_model_parts.size)
-    infile.reststr = reststr
+    mnecessitation = parse_single_necessitation(infile, current_model_parts.size)
     if mnecessitation is None:
         return False
 
@@ -285,7 +291,7 @@ def parse_header(infile: SourceFile) -> UglyHeader:
     """
     Parse the header line from the ugly data format.
     """
-    header_line = next(infile).strip()
+    header_line = infile.next_line()
     header_tokens = header_line.split(" ")
     assert header_tokens[0] in ["0", "1"]
     assert header_tokens[6] in ["0", "1"]
@@ -314,12 +320,12 @@ def parse_size(infile: SourceFile, first_run: bool) -> Optional[int]:
     Parse the line representing the matrix size.
     """
 
-    size = int(next(infile))
+    size = int(infile.next_line())
     # HACK: When necessitation and custom connectives are enabled
     # MaGIC may produce -1s at the beginning of the file
     if first_run:
         while size == -1:
-            size = int(next(infile))
+            size = int(infile.next_line())
 
     if size == -1:
         return None
@@ -330,7 +336,7 @@ def parse_single_negation(infile: SourceFile, size: int) -> Optional[ModelFuncti
     """
     Parse the line representing the negation table.
     """
-    line = next(infile).strip()
+    line = infile.next_line()
     if line == '-1':
         return None
 
@@ -410,7 +416,7 @@ def parse_single_order(infile: SourceFile, size: int) -> Optional[Tuple[ModelFun
     """
     Parse the line representing the ordering table
     """
-    line = next(infile).strip()
+    line = infile.next_line()
     if line == '-1':
         return None
 
@@ -461,7 +467,7 @@ def parse_single_designated(infile: SourceFile, size: int) -> Optional[Set[Model
     """
     Parse the line representing which model values are designated.
     """
-    line = next(infile).strip()
+    line = infile.next_line()
     if line == '-1':
         return None
 
@@ -477,17 +483,26 @@ def parse_single_designated(infile: SourceFile, size: int) -> Optional[Set[Model
 
     return designated_values
 
-def parse_single_implication(instr: str, line: int, size: int) -> Tuple[ModelFunction, str]:
+def parse_single_implication(infile: SourceFile, size: int) -> Tuple[ModelFunction]:
     """
     Take the current string, parse an implication table from it,
     and return along with it the remainder of the string
     """
-    if instr == "-1":
-        return None, ""
 
-    table = instr.split(" ")
+    try:
+        first_token = next(infile)
+        if first_token == "-1":
+            return None
+    except StopIteration:
+        return None
 
-    assert len(table) >= (size + 1)**2, f"Implication table does not match expected size at line {line}"
+    table = []
+    try:
+        table = [first_token] + [next(infile) for _ in range((size + 1)**2 - 1)]
+    except StopIteration:
+        pass
+
+    assert len(table) == (size + 1)**2, f"Implication table does not match expected size at line {infile.current_line}"
 
     mapping = {}
     table_i = 0
@@ -502,18 +517,26 @@ def parse_single_implication(instr: str, line: int, size: int) -> Tuple[ModelFun
             mapping[(x, y)] = r
 
     mimplication = ModelFunction(2, mapping, "→")
-    reststr = " ".join(table[(size + 1)**2:])
-    return mimplication, reststr
+    return mimplication
 
-def parse_single_necessitation_from_str(instr: str, line: int, size: int) -> Optional[ModelFunction]:
+def parse_single_necessitation(infile: SourceFile, size: int) -> Optional[ModelFunction]:
     """
     Parse the line representing the necessitation table.
     """
-    if instr == "-1":
+    try:
+        first_token = next(infile)
+        if first_token == "-1":
+            return None
+    except StopIteration:
         return None
 
-    row = instr.split(" ")
-    assert len(row) >= size + 1, f"Necessitation table doesn't match size at line {line}"
+    row = []
+    try:
+        row = [first_token] + [next(infile) for _ in range(size)]
+    except StopIteration:
+        pass
+
+    assert len(row) == size + 1, f"Necessitation table doesn't match size at line {infile.current_line}"
     mapping = {}
 
     for i, j in zip(range(size + 1), row):
@@ -522,9 +545,8 @@ def parse_single_necessitation_from_str(instr: str, line: int, size: int) -> Opt
         mapping[(x, )] = y
 
     mnecessitation = ModelFunction(1, mapping, "!")
-    reststr = " ".join(row[(size + 1):])
 
-    return mnecessitation, reststr
+    return mnecessitation
 
 
 if __name__ == "__main__":
