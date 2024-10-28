@@ -4,6 +4,7 @@ Parses the Magic Ugly Data File Format
 Assumes the base logic is R with no extra connectives
 """
 import argparse
+import re
 import sys
 from typing import TextIO, List, Optional, Tuple, Set, Dict
 
@@ -72,7 +73,7 @@ class ModelBuilder:
         self.mimplication: Optional[ModelFunction] = None
         self.num_necessitation: int = 0
         self.mnecessitation: Optional[ModelFunction] = None
-        self.custom_model_functions: List[Tuple[int, ModelFunction]]
+        self.custom_model_functions: Dict[str,  ModelFunction] = {}
 
 class Stage:
     def __init__(self, name: str):
@@ -89,10 +90,13 @@ class Stages:
     def add(self, name: str):
         stage = Stage(name)
         stage.next = stage
+
         if self.last_stage is not None:
             stage.previous = self.last_stage
             self.last_stage.next = stage
         else:
+            # The previous of the first stage
+            # is the end
             stage.previous = Stage("end")
 
         self.stages[name] = stage
@@ -114,16 +118,14 @@ def derive_stages(header: UglyHeader) -> Stages:
     stages.add("implication")
     if header.necessitation:
         stages.add("necessitation")
-    # TODO: Can't use -- as that can be a custom symbol
-    # for (acidity, symbol) in header.custom_model_functions:
-        # stages.add(f"custom--{acidity}--{symbol}")
+    for (adicity, symbol) in header.custom_model_functions:
+        stages.add(f"custom--{adicity}--{symbol}")
     stages.add("process_model")
 
     # After processing the model, go to the previous stage
     stages.get("process_model").next = stages.get("process_model").previous
 
     return stages
-
 
 def parse_matrices(infile: SourceFile) -> List[Tuple[Model, Dict]]:
     solutions = [] # Reset
@@ -160,7 +162,23 @@ def parse_matrices(infile: SourceFile) -> List[Tuple[Model, Dict]]:
                 processed = process_necessitations(infile, current_model_parts)
                 stage = stage.next if processed else stage.previous
             case _:
-                raise NotImplementedError("Custom Connectives are not yet supported")
+                custom_stage = re.search(r"custom--(\d+)--(\S+)", stage.name)
+                if custom_stage is None or len(custom_stage.groups()) != 2:
+                    raise NotImplementedError(f"Unrecognized Stage: {stage.name}")
+                adicity, symbol = custom_stage.groups()
+                adicity = int(adicity)
+                if adicity == 0:
+                    # We don't need to do anything here
+                    stage = stage.next
+                elif adicity == 1:
+                    processed = process_monadic_connective(infile, symbol, current_model_parts)
+                    stage = stage.next if processed else stage.previous
+                elif adicity == 2:
+                    processed = process_dyadic_connective(infile, symbol, current_model_parts)
+                    stage = stage.next if processed else stage.previous
+                else:
+                    raise NotImplementedError("Unable to process connectives of adicity greater than 2")
+
 
     return solutions
 
@@ -259,10 +277,25 @@ def process_necessitations(infile: SourceFile, current_model_parts: ModelBuilder
 
     return True
 
+def process_monadic_connective(infile: SourceFile, symbol: str, current_model_parts: ModelBuilder) -> bool:
+    mfunction = parse_single_monadic_connective(infile, symbol, current_model_parts.size)
+    if mfunction is None:
+        return False
+
+    current_model_parts.custom_model_functions[symbol] = mfunction
+    return True
+
+def process_dyadic_connective(infile: SourceFile, symbol: str, current_model_parts: ModelBuilder) -> bool:
+    mfunction = parse_single_dyadic_connective(infile, symbol, current_model_parts.size)
+    if mfunction is None:
+        return False
+
+    current_model_parts.custom_model_functions[symbol] = mfunction
+    return True
+
 def process_model(mp: ModelBuilder, solutions: List[Tuple[Model, Dict]]):
     """Create Model"""
     assert mp.mimplication is not None
-    assert len(mp.carrier_set) > 0
     assert mp.size + 1 == len(mp.carrier_set)
 
     logical_operations = { mp.mimplication }
@@ -283,6 +316,12 @@ def process_model(mp: ModelBuilder, solutions: List[Tuple[Model, Dict]]):
     if mp.mnecessitation is not None:
         logical_operations.add(mp.mnecessitation)
         interpretation[Necessitation] = mp.mnecessitation
+
+    for custom_mf in mp.custom_model_functions.values():
+        if custom_mf is None:
+            logical_operations.add(custom_mf)
+        # NOTE: No need to assign interpretation
+        # for VSP check
 
     solutions.append((model, interpretation))
     print(f"Parsed Matrix {model.name}")
@@ -336,20 +375,7 @@ def parse_single_negation(infile: SourceFile, size: int) -> Optional[ModelFuncti
     """
     Parse the line representing the negation table.
     """
-    line = infile.next_line()
-    if line == '-1':
-        return None
-
-    row = line.split(" ")
-    assert len(row) == size + 1, f"Negation table doesn't match size at line {infile.current_line}"
-    mapping = {}
-
-    for i, j in zip(range(size + 1), row):
-        x = mvalue_from_index(i)
-        y = parse_mvalue(j)
-        mapping[(x, )] = y
-
-    return ModelFunction(1, mapping, "¬")
+    return parse_single_monadic_connective(infile, "¬", size)
 
 def mvalue_from_index(i: int) -> ModelValue:
     """
@@ -485,10 +511,33 @@ def parse_single_designated(infile: SourceFile, size: int) -> Optional[Set[Model
 
 def parse_single_implication(infile: SourceFile, size: int) -> Tuple[ModelFunction]:
     """
-    Take the current string, parse an implication table from it,
-    and return along with it the remainder of the string
+    Take the current string, parse an implication table from it.
     """
+    return parse_single_dyadic_connective(infile, "→", size)
 
+def parse_single_necessitation(infile: SourceFile, size: int) -> Optional[ModelFunction]:
+    """
+    Parse the line representing the necessitation table.
+    """
+    return parse_single_monadic_connective(infile, "!", size)
+
+def parse_single_monadic_connective(infile: SourceFile, symbol: str, size: int) -> Optional[ModelFunction]:
+    line = infile.next_line()
+    if line == '-1':
+        return None
+
+    row = line.split(" ")
+    assert len(row) == size + 1, f"{symbol} table doesn't match size at line {infile.current_line}"
+    mapping = {}
+
+    for i, j in zip(range(size + 1), row):
+        x = mvalue_from_index(i)
+        y = parse_mvalue(j)
+        mapping[(x, )] = y
+
+    return ModelFunction(1, mapping, symbol)
+
+def parse_single_dyadic_connective(infile: SourceFile, symbol: str, size: int) -> Optional[ModelFunction]:
     try:
         first_token = next(infile)
         if first_token == "-1":
@@ -502,7 +551,7 @@ def parse_single_implication(infile: SourceFile, size: int) -> Tuple[ModelFuncti
     except StopIteration:
         pass
 
-    assert len(table) == (size + 1)**2, f"Implication table does not match expected size at line {infile.current_line}"
+    assert len(table) == (size + 1)**2, f"{symbol} table does not match expected size at line {infile.current_line}"
 
     mapping = {}
     table_i = 0
@@ -516,37 +565,7 @@ def parse_single_implication(infile: SourceFile, size: int) -> Tuple[ModelFuncti
 
             mapping[(x, y)] = r
 
-    mimplication = ModelFunction(2, mapping, "→")
-    return mimplication
-
-def parse_single_necessitation(infile: SourceFile, size: int) -> Optional[ModelFunction]:
-    """
-    Parse the line representing the necessitation table.
-    """
-    try:
-        first_token = next(infile)
-        if first_token == "-1":
-            return None
-    except StopIteration:
-        return None
-
-    row = []
-    try:
-        row = [first_token] + [next(infile) for _ in range(size)]
-    except StopIteration:
-        pass
-
-    assert len(row) == size + 1, f"Necessitation table doesn't match size at line {infile.current_line}"
-    mapping = {}
-
-    for i, j in zip(range(size + 1), row):
-        x = mvalue_from_index(i)
-        y = parse_mvalue(j)
-        mapping[(x, )] = y
-
-    mnecessitation = ModelFunction(1, mapping, "!")
-
-    return mnecessitation
+    return ModelFunction(2, mapping, symbol)
 
 
 if __name__ == "__main__":
