@@ -149,21 +149,30 @@ def has_vsp(model: Model, interpretation: Dict[Operation, ModelFunction]) -> VSP
 
         # Compute the closure of all operations
         # with just the xs
-        carrier_set_left: Set[ModelValue] = model_closure(xs, model.logical_operations)
+        carrier_set_left: Set[ModelValue] = model_closure(xs, model.logical_operations, top, bottom)
 
         # Save to cache
         if cached_xs[0] is not None and not cached_ys[1]:
             closure_cache.append((orig_xs, carrier_set_left))
 
+        if top is not None and top in carrier_set_left:
+            continue
+        if bottom is not None and bottom in carrier_set_left:
+            continue
+
 
         # Compute the closure of all operations
         # with just the ys
-        carrier_set_right: Set[ModelValue] = model_closure(ys, model.logical_operations)
+        carrier_set_right: Set[ModelValue] = model_closure(ys, model.logical_operations, top, bottom)
 
         # Save to cache
         if cached_ys[0] is not None and not cached_ys[1]:
             closure_cache.append((orig_ys, carrier_set_right))
 
+        if top is not None and top in carrier_set_right:
+            continue
+        if bottom is not None and bottom in carrier_set_right:
+            continue
 
         # If the carrier set intersects, then move on to the next
         # subalgebra

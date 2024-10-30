@@ -219,15 +219,18 @@ def satisfiable(logic: Logic, model: Model, interpretation: Dict[Operation, Mode
 
 
 
-def model_closure(initial_set: Set[ModelValue], mfunctions: Set[ModelFunction]):
+def model_closure(initial_set: Set[ModelValue], mfunctions: Set[ModelFunction], top: Optional[ModelValue], bottom: Optional[ModelValue]) -> Set[ModelValue]:
     """
     Given an initial set of model values and a set of model functions,
     compute the complete set of model values that are closed
     under the operations.
+
+    If top or bottom is encountered, then we end the saturation procedure early.
     """
     closure_set: Set[ModelValue] = initial_set
     last_new: Set[ModelValue] = initial_set
     changed: bool = True
+    topbottom_found = False
 
     while changed:
         changed = False
@@ -250,6 +253,18 @@ def model_closure(initial_set: Set[ModelValue], mfunctions: Set[ModelFunction]):
                     element = mfun(*args)
                     if element not in closure_set:
                         new_elements.add(element)
+
+                    # Optimization: Break out of computation
+                    # early when top or bottom element is foun
+                    if top is not None and element == top:
+                        topbottom_found = True
+                    if bottom is not None and element == bottom:
+                        topbottom_found = True
+                    if topbottom_found:
+                        break
+
+                if topbottom_found:
+                    break
 
                 # We don't need to compute the arguments
                 # thanks to the cache, so move onto the
@@ -274,8 +289,27 @@ def model_closure(initial_set: Set[ModelValue], mfunctions: Set[ModelFunction]):
                         if element not in closure_set:
                             new_elements.add(element)
 
+                        # Optimization: Break out of computation
+                        # early when top or bottom element is foun
+                        if top is not None and element == top:
+                            topbottom_found = True
+                        if bottom is not None and element == bottom:
+                            topbottom_found = True
+                        if topbottom_found:
+                            break
+
+                    if topbottom_found:
+                        break
+
+                if topbottom_found:
+                    break
+
+
         closure_set.update(new_elements)
         changed = len(new_elements) > 0
         last_new = new_elements
+
+        if topbottom_found:
+            break
 
     return closure_set
