@@ -8,7 +8,7 @@ from common import set_to_str
 from model import (
     Model, model_closure, ModelFunction, ModelValue
 )
-from logic import Implication, Operation
+from logic import Conjunction, Disjunction, Implication, Operation
 
 def preseed(
         initial_set: Set[ModelValue],
@@ -38,6 +38,40 @@ def preseed(
     same_set = candidate_preseed[1] == 0
     return candidate_preseed[0], same_set
 
+
+def find_top(algebra: Set[ModelValue], mconjunction: Optional[ModelFunction], mdisjunction: Optional[ModelFunction]) -> Optional[ModelValue]:
+    """
+    Find the top of the order lattice.
+    T || a = T, T && a = a for all a in the carrier set
+    """
+    if mconjunction is None or mdisjunction is None:
+        return None
+
+    for x in algebra:
+        for y in algebra:
+            if mdisjunction(x, y) == x and mconjunction(x, y) == y:
+                return x
+
+    print("[Warning] Failed to find the top of the lattice")
+    return None
+
+def find_bottom(algebra: Set[ModelValue], mconjunction: Optional[ModelFunction], mdisjunction: Optional[ModelFunction]) -> Optional[ModelValue]:
+    """
+    Find the bottom of the order lattice
+    F || a = a, F && a = F for all a in the carrier set
+    """
+    if mconjunction is None or mdisjunction is None:
+        return None
+
+    for x in algebra:
+        for y in algebra:
+            if mdisjunction(x, y) == y and mconjunction(x, y) == x:
+                return x
+
+    print("[Warning] Failed to find the bottom of the lattice")
+    return None
+
+
 class VSP_Result:
     def __init__(
             self, has_vsp: bool, model_name: Optional[str] = None,
@@ -62,6 +96,10 @@ def has_vsp(model: Model, interpretation: Dict[Operation, ModelFunction]) -> VSP
     sharing property.
     """
     impfunction = interpretation[Implication]
+    mconjunction = interpretation.get(Conjunction)
+    mdisjunction = interpretation.get(Disjunction)
+    top = find_top(model.carrier_set, mconjunction, mdisjunction)
+    bottom = find_bottom(model.carrier_set, mconjunction, mdisjunction)
 
     # NOTE: No models with only one designated
     # value satisfies VSP
@@ -101,28 +139,45 @@ def has_vsp(model: Model, interpretation: Dict[Operation, ModelFunction]) -> VSP
 
 
         # NOTE: Optimziation before model_closure
-        # If the carrier set intersects, then move on to the next
-        # subalgebra
+        # If the two subalgebras intersect, move
+        # onto the next pair
         if len(xs & ys) > 0:
+            continue
+
+        # NOTE: Optimization
+        # if either subalgebra contains top or bottom, move
+        # onto the next pair
+        if top is not None and (top in xs or top in ys):
+            continue
+        if bottom is not None and (bottom in xs or bottom in ys):
             continue
 
         # Compute the closure of all operations
         # with just the xs
-        carrier_set_left: Set[ModelValue] = model_closure(xs, model.logical_operations)
+        carrier_set_left: Set[ModelValue] = model_closure(xs, model.logical_operations, top, bottom)
 
         # Save to cache
         if cached_xs[0] is not None and not cached_ys[1]:
             closure_cache.append((orig_xs, carrier_set_left))
 
+        if top is not None and top in carrier_set_left:
+            continue
+        if bottom is not None and bottom in carrier_set_left:
+            continue
+
 
         # Compute the closure of all operations
         # with just the ys
-        carrier_set_right: Set[ModelValue] = model_closure(ys, model.logical_operations)
+        carrier_set_right: Set[ModelValue] = model_closure(ys, model.logical_operations, top, bottom)
 
         # Save to cache
         if cached_ys[0] is not None and not cached_ys[1]:
             closure_cache.append((orig_ys, carrier_set_right))
 
+        if top is not None and top in carrier_set_right:
+            continue
+        if bottom is not None and bottom in carrier_set_right:
+            continue
 
         # If the carrier set intersects, then move on to the next
         # subalgebra
