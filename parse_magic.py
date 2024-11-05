@@ -3,9 +3,7 @@ Parses the Magic Ugly Data File Format
 
 Assumes the base logic is R with no extra connectives
 """
-import argparse
 import re
-import sys
 from typing import TextIO, List, Optional, Tuple, Set, Dict
 
 from model import Model, ModelValue, ModelFunction
@@ -17,7 +15,6 @@ from logic import (
     Disjunction,
     Operation
 )
-from vsp import has_vsp
 
 class SourceFile:
     def __init__(self, fileobj: TextIO):
@@ -594,22 +591,3 @@ def parse_single_dyadic_connective(infile: SourceFile, symbol: str, size: int) -
             mapping[(x, y)] = r
 
     return ModelFunction(2, mapping, symbol)
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="VSP Checker")
-    parser.add_argument("--verbose", action='store_true', help="Print out all parsed matrices")
-    args = vars(parser.parse_args())
-    solutions = parse_matrices(SourceFile(sys.stdin))
-    print(f"Parsed {len(solutions)} matrices")
-    num_has_vsp = 0
-    for i, (model, interpretation) in enumerate(solutions):
-        vsp_result = has_vsp(model, interpretation)
-        print(vsp_result)
-
-        if args['verbose'] or vsp_result.has_vsp:
-            print(model)
-
-        if vsp_result.has_vsp:
-            num_has_vsp += 1
-    print(f"Tested {len(solutions)} models, {num_has_vsp} of which satisfy VSP")
