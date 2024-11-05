@@ -14,7 +14,8 @@ from logic import (
     Conjunction,
     Negation,
     Necessitation,
-    Disjunction
+    Disjunction,
+    Operation
 )
 from vsp import has_vsp
 
@@ -25,6 +26,11 @@ class SourceFile:
         self.reststr = ""
 
     def next_line(self):
+        """
+        Grabs the next line.
+        If reststr is populated return that, otherwise
+        consume generator
+        """
         if self.reststr != "":
             reststr = self.reststr
             self.reststr = ""
@@ -48,14 +54,13 @@ class SourceFile:
 
         return next_token
 
-
-    def set_reststr(self, reststr: str):
-        self.reststr = reststr
-
 class UglyHeader:
     def __init__(self, negation: bool, necessitation: bool, custom_model_functions: List[Tuple[int, str]]):
+        # Booleans describing the logical fragment
         self.negation = negation
         self.necessitation = necessitation
+        # List of custom model functions described as
+        # a sequence of (adicity, symbol) pairs
         self.custom_model_functions = custom_model_functions
 
 class ModelBuilder:
@@ -68,6 +73,7 @@ class ModelBuilder:
         self.designated_values: Set[ModelValue] = set()
         self.mimplication: Optional[ModelFunction] = None
         self.mnecessitation: Optional[ModelFunction] = None
+        # Map symbol to model function
         self.custom_model_functions: Dict[str,  ModelFunction] = {}
 
 class Stage:
@@ -75,6 +81,7 @@ class Stage:
         self.name = name
         self.next: Optional['Stage'] = None
         self.previous: Optional['Stage'] = None
+        # This corresponds to a portion of the model name in MaGIC
         self.num = 0
 
     def increment(self):
@@ -88,44 +95,39 @@ class Stage:
 
 class Stages:
     def __init__(self):
-        self.stages: Dict[str, Stage] = {}
-        self.last_added_stage: Optional[Stage] = None
+        end_stage = Stage("end")
+        self.stages: Dict[str, Stage] = {"end": end_stage}
+        self.last_added_stage: Stage = end_stage
         self.first_stage: Optional[Stage] = None
 
     def add(self, name: str):
         stage = Stage(name)
         stage.next = stage
 
-        if self.last_added_stage is not None:
-            stage.previous = self.last_added_stage
+        stage.previous = self.last_added_stage
+
+        # End stage is a sink so don't
+        # mark any stages as next
+        if self.last_added_stage.name != "end":
             self.last_added_stage.next = stage
         else:
-            # The previous of the first stage
-            # is the end
+            # If this is triggered, than this is the first
+            # stage added
             self.first_stage = stage
-            stage.previous = Stage("end")
 
         self.stages[name] = stage
         self.last_added_stage = stage
 
-    def next_stage(self, name):
-        return self.stages[name].next
-
-    def previous_stage(self, name):
-        return self.stages[name].previous
-
     def reset_after(self, name):
+        """
+        Resets the stage counters after a given stage.
+        This is to accurately reflect the name of the
+        model within MaGIC.
+        """
         stage = self.stages[name]
-        stage.reset()
-        if stage.next.name == "process_model":
-            return
-        next_stage = stage.next
-        while next_stage is not None:
-            next_stage.reset()
-            if next_stage.next.name == "process_model":
-                next_stage = None
-            else:
-                next_stage = next_stage.next
+        while stage.name != "process_model":
+            stage.reset()
+            stage = stage.next
 
     def get(self, name):
         return self.stages[name]
@@ -171,12 +173,12 @@ def derive_stages(header: UglyHeader) -> Stages:
     return stages
 
 def parse_matrices(infile: SourceFile) -> List[Tuple[Model, Dict]]:
-    solutions = [] # Reset
+    solutions = []
     header = parse_header(infile)
     stages = derive_stages(header)
     first_run = True
     current_model_parts = ModelBuilder()
-    stage = stages.get("size")
+    stage = stages.first_stage
     while True:
         match stage.name:
             case "end":
@@ -239,16 +241,7 @@ def parse_matrices(infile: SourceFile) -> List[Tuple[Model, Dict]]:
                     raise NotImplementedError(f"Unrecognized Stage: {stage.name}")
                 adicity, symbol = custom_stage.groups()
                 adicity = int(adicity)
-                processed = True
-                if adicity == 0:
-                    # We don't need to do anything here
-                    stage = stage.next
-                elif adicity == 1:
-                    processed = process_custom_monadic_connective(infile, symbol, current_model_parts)
-                elif adicity == 2:
-                    processed = process_custom_dyadic_connective(infile, symbol, current_model_parts)
-                else:
-                    raise NotImplementedError("Unable to process connectives of adicity greater than c2")
+                processed = process_custom_connective(infile, symbol, adicity, current_model_parts)
 
                 if processed:
                     stage.increment()
@@ -256,7 +249,6 @@ def parse_matrices(infile: SourceFile) -> List[Tuple[Model, Dict]]:
                 else:
                     stages.reset_after(stage.name)
                     stage = stage.previous
-
 
     return solutions
 
@@ -276,7 +268,7 @@ def process_sizes(infile: SourceFile, current_model_parts: ModelBuilder, first_r
 
 def process_negations(infile: SourceFile, current_model_parts: ModelBuilder) -> bool:
     """Stage 2 (Optional)"""
-    mnegation = parse_single_negation(infile, current_model_parts.size)
+    mnegation = parse_single_monadic_connective(infile, "¬", current_model_parts.size)
     if mnegation is None:
         return False
 
@@ -306,7 +298,7 @@ def process_designateds(infile: SourceFile, current_model_parts: ModelBuilder) -
 
 def process_implications(infile: SourceFile, current_model_parts: ModelBuilder) -> bool:
     """Stage 5"""
-    mimplication = parse_single_implication(infile, current_model_parts.size)
+    mimplication = parse_single_dyadic_connective(infile, "→", current_model_parts.size)
     if mimplication is None:
         return False
 
@@ -314,23 +306,23 @@ def process_implications(infile: SourceFile, current_model_parts: ModelBuilder) 
     return True
 
 def process_necessitations(infile: SourceFile, current_model_parts: ModelBuilder) -> bool:
-    mnecessitation = parse_single_necessitation(infile, current_model_parts.size)
+    mnecessitation = parse_single_monadic_connective(infile, "!", current_model_parts.size)
     if mnecessitation is None:
         return False
 
     current_model_parts.mnecessitation = mnecessitation
     return True
 
-def process_custom_monadic_connective(infile: SourceFile, symbol: str, current_model_parts: ModelBuilder) -> bool:
-    mfunction = parse_single_monadic_connective(infile, symbol, current_model_parts.size)
-    if mfunction is None:
-        return False
+def process_custom_connective(infile: SourceFile, symbol: str, adicity: int, current_model_parts: ModelBuilder) -> bool:
+    if adicity == 0:
+        mfunction = parse_single_nullary_connective(infile, symbol)
+    elif adicity == 1:
+        mfunction = parse_single_monadic_connective(infile, symbol, current_model_parts.size)
+    elif adicity == 2:
+        mfunction = parse_single_dyadic_connective(infile, symbol, current_model_parts.size)
+    else:
+        raise NotImplementedError("Unable to process connectives of adicity greater than 2")
 
-    current_model_parts.custom_model_functions[symbol] = mfunction
-    return True
-
-def process_custom_dyadic_connective(infile: SourceFile, symbol: str, current_model_parts: ModelBuilder) -> bool:
-    mfunction = parse_single_dyadic_connective(infile, symbol, current_model_parts.size)
     if mfunction is None:
         return False
 
@@ -339,8 +331,10 @@ def process_custom_dyadic_connective(infile: SourceFile, symbol: str, current_mo
 
 def process_model(model_name: str, mp: ModelBuilder,  solutions: List[Tuple[Model, Dict]]):
     """Create Model"""
-    assert mp.mimplication is not None
+    assert mp.size > 0
     assert mp.size + 1 == len(mp.carrier_set)
+    assert len(mp.designated_values) <= len(mp.carrier_set)
+    assert mp.mimplication is not None
 
     logical_operations = { mp.mimplication }
     model = Model(mp.carrier_set, logical_operations, mp.designated_values, name=model_name)
@@ -363,11 +357,10 @@ def process_model(model_name: str, mp: ModelBuilder,  solutions: List[Tuple[Mode
     for custom_mf in mp.custom_model_functions.values():
         if custom_mf is not None:
             logical_operations.add(custom_mf)
-            # NOTE: No need to assign interpretation
-            # for VSP check
+            op = Operation(custom_mf.operation_name, custom_mf.arity)
+            interpretation[op] = custom_mf
 
     solutions.append((model, interpretation))
-    print(f"Parsed Matrix {model.name}")
 
 def parse_header(infile: SourceFile) -> UglyHeader:
     """
@@ -403,6 +396,7 @@ def parse_size(infile: SourceFile, first_run: bool) -> Optional[int]:
     """
 
     size = int(infile.next_line())
+
     # HACK: When necessitation and custom connectives are enabled
     # MaGIC may produce -1s at the beginning of the file
     if first_run:
@@ -413,12 +407,6 @@ def parse_size(infile: SourceFile, first_run: bool) -> Optional[int]:
         return None
     assert size > 0, f"Unexpected size at line {infile.current_line}"
     return size
-
-def parse_single_negation(infile: SourceFile, size: int) -> Optional[ModelFunction]:
-    """
-    Parse the line representing the negation table.
-    """
-    return parse_single_monadic_connective(infile, "¬", size)
 
 def mvalue_from_index(i: int) -> ModelValue:
     """
@@ -506,7 +494,6 @@ def parse_single_order(infile: SourceFile, size: int) -> Optional[Tuple[ModelFun
     cmapping = {}
     dmapping = {}
 
-
     for i in range(size + 1):
         x = mvalue_from_index(i)
         for j in range(size + 1):
@@ -552,17 +539,18 @@ def parse_single_designated(infile: SourceFile, size: int) -> Optional[Set[Model
 
     return designated_values
 
-def parse_single_implication(infile: SourceFile, size: int) -> Tuple[ModelFunction]:
-    """
-    Take the current string, parse an implication table from it.
-    """
-    return parse_single_dyadic_connective(infile, "→", size)
 
-def parse_single_necessitation(infile: SourceFile, size: int) -> Optional[ModelFunction]:
-    """
-    Parse the line representing the necessitation table.
-    """
-    return parse_single_monadic_connective(infile, "!", size)
+def parse_single_nullary_connective(infile: SourceFile, symbol: str) -> Optional[ModelFunction]:
+    line = infile.next_line()
+    if line == "-1":
+        return None
+
+    row = line.split(" ")
+    assert len(row) == 1, f"More than one assignment for a nullary connective was provided at line {infile.current_line}"
+
+    mapping = {}
+    mapping[()] = parse_mvalue(row[0])
+    return ModelFunction(0, mapping, symbol)
 
 def parse_single_monadic_connective(infile: SourceFile, symbol: str, size: int) -> Optional[ModelFunction]:
     line = infile.next_line()
@@ -581,11 +569,8 @@ def parse_single_monadic_connective(infile: SourceFile, symbol: str, size: int) 
     return ModelFunction(1, mapping, symbol)
 
 def parse_single_dyadic_connective(infile: SourceFile, symbol: str, size: int) -> Optional[ModelFunction]:
-    try:
-        first_token = next(infile)
-        if first_token == "-1":
-            return None
-    except StopIteration:
+    first_token = next(infile)
+    if first_token == "-1":
         return None
 
     table = []
