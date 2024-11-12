@@ -219,7 +219,7 @@ def satisfiable(logic: Logic, model: Model, interpretation: Dict[Operation, Mode
 
 
 
-def model_closure(initial_set: Set[ModelValue], mfunctions: Set[ModelFunction], top: Optional[ModelValue], bottom: Optional[ModelValue]) -> Set[ModelValue]:
+def model_closure(initial_set: Set[ModelValue], mfunctions: Set[ModelFunction], forbidden_element: Optional[ModelValue]) -> Set[ModelValue]:
     """
     Given an initial set of model values and a set of model functions,
     compute the complete set of model values that are closed
@@ -230,7 +230,7 @@ def model_closure(initial_set: Set[ModelValue], mfunctions: Set[ModelFunction], 
     closure_set: Set[ModelValue] = initial_set
     last_new: Set[ModelValue] = initial_set
     changed: bool = True
-    topbottom_found = False
+    forbidden_found = False
 
     while changed:
         changed = False
@@ -256,14 +256,11 @@ def model_closure(initial_set: Set[ModelValue], mfunctions: Set[ModelFunction], 
 
                     # Optimization: Break out of computation
                     # early when top or bottom element is foun
-                    if top is not None and element == top:
-                        topbottom_found = True
-                    if bottom is not None and element == bottom:
-                        topbottom_found = True
-                    if topbottom_found:
+                    if forbidden_element is not None and element == forbidden_element:
+                        forbidden_found = True
                         break
 
-                if topbottom_found:
+                if forbidden_found:
                     break
 
                 # We don't need to compute the arguments
@@ -291,17 +288,14 @@ def model_closure(initial_set: Set[ModelValue], mfunctions: Set[ModelFunction], 
 
                         # Optimization: Break out of computation
                         # early when top or bottom element is foun
-                        if top is not None and element == top:
-                            topbottom_found = True
-                        if bottom is not None and element == bottom:
-                            topbottom_found = True
-                        if topbottom_found:
+                        if forbidden_element is not None and element == forbidden_element:
+                            forbidden_found = True
                             break
 
-                    if topbottom_found:
+                    if forbidden_found:
                         break
 
-                if topbottom_found:
+                if forbidden_found:
                     break
 
 
@@ -309,7 +303,7 @@ def model_closure(initial_set: Set[ModelValue], mfunctions: Set[ModelFunction], 
         changed = len(new_elements) > 0
         last_new = new_elements
 
-        if topbottom_found:
+        if forbidden_found:
             break
 
     return closure_set
