@@ -48,9 +48,13 @@ def find_top(algebra: Set[ModelValue], mconjunction: Optional[ModelFunction], md
         return None
 
     for x in algebra:
+        is_top = True
         for y in algebra:
-            if mdisjunction(x, y) == x and mconjunction(x, y) == y:
-                return x
+            if mdisjunction(x, y) != x or mconjunction(x, y) != y:
+                is_top = False
+                break
+        if is_top:
+            return x
 
     print("[Warning] Failed to find the top of the lattice")
     return None
@@ -64,9 +68,13 @@ def find_bottom(algebra: Set[ModelValue], mconjunction: Optional[ModelFunction],
         return None
 
     for x in algebra:
+        is_bottom = True
         for y in algebra:
-            if mdisjunction(x, y) == y and mconjunction(x, y) == x:
-                return x
+            if mdisjunction(x, y) != y or mconjunction(x, y) != x:
+                is_bottom = False
+                break
+        if is_bottom:
+            return x
 
     print("[Warning] Failed to find the bottom of the lattice")
     return None
