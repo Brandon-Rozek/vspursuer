@@ -1,3 +1,4 @@
+from common import immutable
 from typing import Optional, Set, Tuple
 from functools import lru_cache
 
@@ -6,12 +7,13 @@ class Operation:
         self.symbol = symbol
         self.arity = arity
         self.hashed_value = hash(self.symbol) + self.arity
-        def immutable(self, name, value):
-            raise Exception("Operations are immutable")
         self.__setattr__ = immutable
 
     def __hash__(self):
         return self.hashed_value
+
+    def __eq__(self, x):
+        return self.symbol == x.symbol and self.arity == x.arity
 
     def __call__(self, *args):
         # Ensure the arity is met
