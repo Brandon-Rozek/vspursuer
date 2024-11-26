@@ -2,7 +2,7 @@
 Matrix model semantics and satisfiability of
 a given logic.
 """
-from common import set_to_str
+from common import set_to_str, immutable
 from logic import (
     get_propostional_variables, Logic,
     Operation, PropositionalVariable, Term
@@ -15,13 +15,10 @@ from typing import Dict, List, Optional, Set, Tuple
 
 __all__ = ['ModelValue', 'ModelFunction', 'Model', 'Interpretation']
 
-
 class ModelValue:
     def __init__(self, name):
         self.name = name
         self.hashed_value = hash(self.name)
-        def immutable(self, name, value):
-            raise Exception("Model values are immutable")
         self.__setattr__ = immutable
     def __str__(self):
         return self.name

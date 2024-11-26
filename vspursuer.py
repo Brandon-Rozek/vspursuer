@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
+from os import cpu_count
 import argparse
+import multiprocessing
+
 from parse_magic import (
     SourceFile,
     parse_matrices
 )
-from vsp import has_vsp
+from vsp import has_vsp, VSP_Result
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="VSP Checker")
@@ -22,14 +25,21 @@ if __name__ == "__main__":
     print(f"Parsed {len(solutions)} matrices")
 
     num_has_vsp = 0
-    for i, (model, interpretation) in enumerate(solutions):
-        vsp_result = has_vsp(model, interpretation)
-        print(vsp_result)
+    with multiprocessing.Pool(processes=max(cpu_count() - 2, 1)) as pool:
+        results = [
+            pool.apply_async(has_vsp, (model, interpretation,))
+            for model, interpretation in solutions
+        ]
 
-        if args['verbose'] or vsp_result.has_vsp:
-            print(model)
+        for i, result in enumerate(results):
+            vsp_result: VSP_Result = result.get()
+            print(vsp_result)
 
-        if vsp_result.has_vsp:
-            num_has_vsp += 1
+            if args['verbose'] or vsp_result.has_vsp:
+                model = solutions[i][0]
+                print(model)
+
+            if vsp_result.has_vsp:
+                num_has_vsp += 1
 
     print(f"Tested {len(solutions)} models, {num_has_vsp} of which satisfy VSP")
