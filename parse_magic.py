@@ -410,7 +410,7 @@ def mvalue_from_index(i: int) -> ModelValue:
     Given an index, return the
     representation of the model value.
     """
-    return ModelValue(f"a{i}")
+    return ModelValue(f"{i}")
 
 def parse_mvalue(x: str) -> ModelValue:
     """
