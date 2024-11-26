@@ -255,7 +255,7 @@ def model_closure(initial_set: Set[ModelValue], mfunctions: Set[ModelFunction], 
                         new_elements.add(element)
 
                     # Optimization: Break out of computation
-                    # early when top or bottom element is foun
+                    # early when forbidden element is found
                     if forbidden_element is not None and element == forbidden_element:
                         forbidden_found = True
                         break
@@ -287,7 +287,7 @@ def model_closure(initial_set: Set[ModelValue], mfunctions: Set[ModelFunction], 
                             new_elements.add(element)
 
                         # Optimization: Break out of computation
-                        # early when top or bottom element is foun
+                        # early when forbidden element is found
                         if forbidden_element is not None and element == forbidden_element:
                             forbidden_found = True
                             break
