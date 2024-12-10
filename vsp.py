@@ -98,14 +98,11 @@ Subalgebra 1: {set_to_str(self.subalgebra1)}
 Subalgebra 2: {set_to_str(self.subalgebra2)}
 """
 
-def has_vsp(model: Model, interpretation: Dict[Operation, ModelFunction]) -> VSP_Result:
+def has_vsp(model: Model, impfunction: ModelFunction, mconjunction: Optional[ModelFunction] = None, mdisjunction: Optional[ModelFunction] = None) -> VSP_Result:
     """
     Checks whether a model has the variable
     sharing property.
     """
-    impfunction = interpretation[Implication]
-    mconjunction = interpretation.get(Conjunction)
-    mdisjunction = interpretation.get(Disjunction)
     top = find_top(model.carrier_set, mconjunction, mdisjunction)
     bottom = find_bottom(model.carrier_set, mconjunction, mdisjunction)
 
