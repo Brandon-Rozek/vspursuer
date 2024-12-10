@@ -2,12 +2,9 @@
 from os import cpu_count
 import argparse
 import multiprocessing as mp
-from logic import Implication, Conjunction, Disjunction
 
-from parse_magic import (
-    SourceFile,
-    parse_matrices
-)
+from logic import Conjunction, Disjunction, Implication
+from parse_magic import SourceFile, parse_matrices
 from vsp import has_vsp, VSP_Result
 
 if __name__ == "__main__":
@@ -25,18 +22,21 @@ if __name__ == "__main__":
         solutions = parse_matrices(SourceFile(data_file))
     print(f"Parsed {len(solutions)} matrices")
 
-    solutions_prep = []
+    # NOTE: When subprocess gets spawned, the logical operations will
+    # have a different memory address than what's expected in interpretation.
+    # This will make it so that we can pass the model functions directly instead.
+    solutions_expanded = []
     for model, interpretation in solutions:
         impfunction = interpretation[Implication]
         mconjunction = interpretation.get(Conjunction)
         mdisjunction = interpretation.get(Disjunction)
-        solutions_prep.append((model, impfunction, mconjunction, mdisjunction))
+        solutions_expanded.append((model, impfunction, mconjunction, mdisjunction))
 
     num_has_vsp = 0
     with mp.Pool(processes=max(cpu_count() - 2, 1)) as pool:
         results = [
             pool.apply_async(has_vsp, (model, impfunction, mconjunction, mdisjunction,))
-            for model, impfunction, mconjunction, mdisjunction in solutions_prep
+            for model, impfunction, mconjunction, mdisjunction in solutions_expanded
         ]
 
         for i, result in enumerate(results):
