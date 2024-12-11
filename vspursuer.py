@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 from os import cpu_count
 import argparse
-import multiprocessing
+import multiprocessing as mp
+from logic import Implication, Conjunction, Disjunction
 
 from parse_magic import (
     SourceFile,
@@ -24,11 +25,18 @@ if __name__ == "__main__":
         solutions = parse_matrices(SourceFile(data_file))
     print(f"Parsed {len(solutions)} matrices")
 
+    solutions_prep = []
+    for model, interpretation in solutions:
+        impfunction = interpretation[Implication]
+        mconjunction = interpretation.get(Conjunction)
+        mdisjunction = interpretation.get(Disjunction)
+        solutions_prep.append((model, impfunction, mconjunction, mdisjunction))
+
     num_has_vsp = 0
-    with multiprocessing.Pool(processes=max(cpu_count() - 2, 1)) as pool:
+    with mp.Pool(processes=max(cpu_count() - 2, 1)) as pool:
         results = [
-            pool.apply_async(has_vsp, (model, interpretation,))
-            for model, interpretation in solutions
+            pool.apply_async(has_vsp, (model, impfunction, mconjunction, mdisjunction,))
+            for model, impfunction, mconjunction, mdisjunction in solutions_prep
         ]
 
         for i, result in enumerate(results):
