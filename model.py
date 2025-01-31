@@ -103,18 +103,34 @@ def binary_function_str(f: ModelFunction) -> str:
 
 Interpretation = Dict[Operation, ModelFunction]
 
+class OrderTable:
+    def __init__(self):
+        self.ordering = set()
+
+    def add(self, x, y):
+        """
+        Add x <= y
+        """
+        self.ordering.add((x, y))
+
+    def is_lt(self, x, y):
+        return (x, y) in self.ordering
+
+
 class Model:
     def __init__(
             self,
             carrier_set: Set[ModelValue],
             logical_operations: Set[ModelFunction],
             designated_values: Set[ModelValue],
+            ordering: Optional[OrderTable] = None,
             name: Optional[str] = None
     ):
         assert designated_values <= carrier_set
         self.carrier_set = carrier_set
         self.logical_operations = logical_operations
         self.designated_values = designated_values
+        self.ordering = ordering
         self.name = str(abs(hash((
             frozenset(carrier_set),
             frozenset(logical_operations),

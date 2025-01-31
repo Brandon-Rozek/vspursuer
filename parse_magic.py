@@ -6,7 +6,7 @@ Assumes the base logic is R with no extra connectives
 import re
 from typing import TextIO, List, Optional, Tuple, Set, Dict
 
-from model import Model, ModelValue, ModelFunction
+from model import Model, ModelValue, ModelFunction, OrderTable
 from logic import (
     Implication,
     Conjunction,
@@ -65,6 +65,7 @@ class ModelBuilder:
         self.size : int = 0
         self.carrier_set : Set[ModelValue] = set()
         self.mnegation: Optional[ModelFunction] = None
+        self.ordering: Optional[OrderTable] = None
         self.mconjunction: Optional[ModelFunction] = None
         self.mdisjunction: Optional[ModelFunction] = None
         self.designated_values: Set[ModelValue] = set()
@@ -278,7 +279,8 @@ def process_orders(infile: SourceFile, current_model_parts: ModelBuilder) -> boo
     if result is None:
         return False
 
-    mconjunction, mdisjunction = result
+    ordering, mconjunction, mdisjunction = result
+    current_model_parts.ordering = ordering
     current_model_parts.mconjunction = mconjunction
     current_model_parts.mdisjunction = mdisjunction
 
@@ -334,7 +336,7 @@ def process_model(model_name: str, mp: ModelBuilder,  solutions: List[Tuple[Mode
     assert mp.mimplication is not None
 
     logical_operations = { mp.mimplication }
-    model = Model(mp.carrier_set, logical_operations, mp.designated_values, name=model_name)
+    model = Model(mp.carrier_set, logical_operations, mp.designated_values, ordering=mp.ordering, name=model_name)
     interpretation = {
         Implication: mp.mimplication
     }
@@ -466,7 +468,7 @@ def determine_dresult(size: int, ordering: Dict[ModelValue, ModelValue], a: Mode
         if not invalid:
             return c
 
-def parse_single_order(infile: SourceFile, size: int) -> Optional[Tuple[ModelFunction, ModelFunction]]:
+def parse_single_order(infile: SourceFile, size: int) -> Optional[Tuple[OrderTable, ModelFunction, ModelFunction]]:
     """
     Parse the line representing the ordering table
     """
@@ -478,6 +480,7 @@ def parse_single_order(infile: SourceFile, size: int) -> Optional[Tuple[ModelFun
 
     assert len(table) == (size + 1)**2, f"Order table doesn't match expected size at line {infile.current_line}"
 
+    ordering = OrderTable()
     omapping = {}
     table_i = 0
 
@@ -486,6 +489,8 @@ def parse_single_order(infile: SourceFile, size: int) -> Optional[Tuple[ModelFun
         for j in range(size + 1):
             y = mvalue_from_index(j)
             omapping[(x, y)] = table[table_i] == '1'
+            if table[table_i] == '1':
+                ordering.add(x, y)
             table_i += 1
 
     cmapping = {}
@@ -514,7 +519,7 @@ def parse_single_order(infile: SourceFile, size: int) -> Optional[Tuple[ModelFun
     mconjunction = ModelFunction(2, cmapping, "∧")
     mdisjunction = ModelFunction(2, dmapping, "∨")
 
-    return mconjunction, mdisjunction
+    return ordering, mconjunction, mdisjunction
 
 def parse_single_designated(infile: SourceFile, size: int) -> Optional[Set[ModelValue]]:
     """
