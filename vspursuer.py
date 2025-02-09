@@ -3,7 +3,7 @@ from os import cpu_count
 import argparse
 import multiprocessing as mp
 
-from logic import Conjunction, Disjunction, Implication
+from logic import Conjunction, Disjunction, Negation, Implication
 from parse_magic import SourceFile, parse_matrices
 from vsp import has_vsp, VSP_Result
 
@@ -24,19 +24,20 @@ if __name__ == "__main__":
 
     # NOTE: When subprocess gets spawned, the logical operations will
     # have a different memory address than what's expected in interpretation.
-    # This will make it so that we can pass the model functions directly instead.
+    # Therefore, we need to pass the model functions directly instead.
     solutions_expanded = []
     for model, interpretation in solutions:
         impfunction = interpretation[Implication]
         mconjunction = interpretation.get(Conjunction)
         mdisjunction = interpretation.get(Disjunction)
-        solutions_expanded.append((model, impfunction, mconjunction, mdisjunction))
+        mnegation = interpretation.get(Negation)
+        solutions_expanded.append((model, impfunction, mconjunction, mdisjunction, mnegation))
 
     num_has_vsp = 0
     with mp.Pool(processes=max(cpu_count() - 2, 1)) as pool:
         results = [
-            pool.apply_async(has_vsp, (model, impfunction, mconjunction, mdisjunction,))
-            for model, impfunction, mconjunction, mdisjunction in solutions_expanded
+            pool.apply_async(has_vsp, (model, impfunction, mconjunction, mdisjunction, mnegation))
+            for model, impfunction, mconjunction, mdisjunction, mnegation in solutions_expanded
         ]
 
         for i, result in enumerate(results):

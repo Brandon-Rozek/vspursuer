@@ -107,7 +107,10 @@ Subalgebra 1: {set_to_str(self.subalgebra1)}
 Subalgebra 2: {set_to_str(self.subalgebra2)}
 """
 
-def has_vsp(model: Model, impfunction: ModelFunction, mconjunction: Optional[ModelFunction] = None, mdisjunction: Optional[ModelFunction] = None) -> VSP_Result:
+def has_vsp(model: Model, impfunction: ModelFunction,
+            mconjunction: Optional[ModelFunction] = None,
+            mdisjunction: Optional[ModelFunction] = None,
+            mnegation: Optional[ModelFunction] = None) -> VSP_Result:
     """
     Checks whether a model has the variable
     sharing property.
@@ -172,6 +175,8 @@ def has_vsp(model: Model, impfunction: ModelFunction, mconjunction: Optional[Mod
         # NOTE: Optimization
         # If the subalgebras are order-dependent, skip this pair
         if order_dependent(xs, ys, model.ordering):
+            continue
+        if mnegation is not None and order_dependent(ys, xs, model.ordering):
             continue
 
         # Compute the closure of all operations
