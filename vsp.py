@@ -151,6 +151,7 @@ def has_vsp(model: Model, impfunction: ModelFunction, mconjunction: Optional[Mod
         # NOTE: Optimization
         # If a subalgebra doesn't have at least one
         # designated value, move onto the next pair.
+        # Depends on no intersection between xs and ys
         if len(xs & model.designated_values) == 0:
             continue
 
