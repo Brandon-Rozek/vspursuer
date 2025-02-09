@@ -11,6 +11,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="VSP Checker")
     parser.add_argument("--verbose", action='store_true', help="Print out all parsed matrices")
     parser.add_argument("-i", type=str, help="Path to MaGIC ugly data file")
+    parser.add_argument("-c", type=int, help="Number of CPUs to use. Default: MAX - 2.")
     args = vars(parser.parse_args())
 
     data_file_path = args.get("i")
@@ -33,7 +34,8 @@ if __name__ == "__main__":
         solutions_expanded.append((model, impfunction, mconjunction, mdisjunction))
 
     num_has_vsp = 0
-    with mp.Pool(processes=max(cpu_count() - 2, 1)) as pool:
+    num_cpu = args.get("c", max(cpu_count() - 2, 1))
+    with mp.Pool(processes=num_cpu) as pool:
         results = [
             pool.apply_async(has_vsp, (model, impfunction, mconjunction, mdisjunction,))
             for model, impfunction, mconjunction, mdisjunction in solutions_expanded
