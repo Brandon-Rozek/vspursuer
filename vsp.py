@@ -3,12 +3,11 @@ Check to see if the model has the variable
 sharing property.
 """
 from itertools import chain, combinations, product
-from typing import Dict, List, Optional, Set, Tuple
+from typing import List, Optional, Set, Tuple
 from common import set_to_str
 from model import (
     Model, model_closure, ModelFunction, ModelValue
 )
-from logic import Conjunction, Disjunction, Implication, Operation
 
 def preseed(
         initial_set: Set[ModelValue],
@@ -145,8 +144,17 @@ def has_vsp(model: Model, impfunction: ModelFunction, mconjunction: Optional[Mod
 
         # NOTE: Optimziation before model_closure
         # If the two subalgebras intersect, move
-        # onto the next pair
+        # onto the next pair.
         if len(xs & ys) > 0:
+            continue
+
+        # NOTE: Optimization
+        # If a subalgebra doesn't have at least one
+        # designated value, move onto the next pair.
+        if len(xs & model.designated_values) == 0:
+            continue
+
+        if len(ys & model.designated_values) == 0:
             continue
 
         # NOTE: Optimization
