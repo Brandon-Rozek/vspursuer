@@ -6,7 +6,7 @@ from itertools import chain, combinations, product
 from typing import List, Optional, Set, Tuple
 from common import set_to_str
 from model import (
-    Model, model_closure, ModelFunction, ModelValue
+    Model, model_closure, ModelFunction, ModelValue, OrderTable
 )
 
 def preseed(
@@ -78,6 +78,15 @@ def find_bottom(algebra: Set[ModelValue], mconjunction: Optional[ModelFunction],
     print("[Warning] Failed to find the bottom of the lattice")
     return None
 
+def order_dependent(subalgebra1: Set[ModelValue], subalegbra2: Set[ModelValue], ordering: OrderTable):
+    """
+    Returns true if there exists a value in subalgebra1 that's less than a value in subalgebra2
+    """
+    for x in subalgebra1:
+        for y in subalegbra2:
+            if ordering.is_lt(x, y):
+                return True
+    return False
 
 class VSP_Result:
     def __init__(
@@ -97,7 +106,10 @@ Subalgebra 1: {set_to_str(self.subalgebra1)}
 Subalgebra 2: {set_to_str(self.subalgebra2)}
 """
 
-def has_vsp(model: Model, impfunction: ModelFunction, mconjunction: Optional[ModelFunction] = None, mdisjunction: Optional[ModelFunction] = None) -> VSP_Result:
+def has_vsp(model: Model, impfunction: ModelFunction,
+            mconjunction: Optional[ModelFunction] = None,
+            mdisjunction: Optional[ModelFunction] = None,
+            mnegation: Optional[ModelFunction] = None) -> VSP_Result:
     """
     Checks whether a model has the variable
     sharing property.
@@ -109,6 +121,8 @@ def has_vsp(model: Model, impfunction: ModelFunction, mconjunction: Optional[Mod
     # value satisfies VSP
     if len(model.designated_values) == 1:
         return VSP_Result(False, model.name)
+
+    assert model.ordering is not None, "Expected ordering table in model"
 
     # Compute I the set of tuples (x, y) where
     # x -> y does not take a designiated value
@@ -165,6 +179,13 @@ def has_vsp(model: Model, impfunction: ModelFunction, mconjunction: Optional[Mod
         if top is not None and top in ys:
             continue
         if bottom is not None and bottom in xs:
+            continue
+
+        # NOTE: Optimization
+        # If the subalgebras are order-dependent, skip this pair
+        if order_dependent(xs, ys, model.ordering):
+            continue
+        if mnegation is not None and order_dependent(ys, xs, model.ordering):
             continue
 
         # Compute the closure of all operations
