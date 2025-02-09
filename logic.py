@@ -27,8 +27,6 @@ class Operation:
 class Term:
     def __init__(self):
         pass
-    def __lt__(self, y):
-        return Inequation(self, y)
 
 class PropositionalVariable(Term):
     def __init__(self, name):
@@ -69,23 +67,6 @@ Conjunction = Operation("∧", 2)
 Disjunction = Operation("∨", 2)
 Implication = Operation("→", 2)
 Necessitation = Operation("!", 1)
-
-class Inequation:
-    def __init__(self, antecedant : Term, consequent: Term):
-        self.antecedant = antecedant
-        self.consequent = consequent
-    def __str__(self):
-        return str(self.antecedant) + "≤" + str(self.consequent)
-
-class InequalityRule:
-    def __init__(self, premises : Set[Inequation], conclusion: Inequation):
-        self.premises = premises
-        self.conclusion = conclusion
-
-    def __str__(self):
-        str_premises = [str(p) for p in self.premises]
-        str_premises2 = "{" + ",".join(str_premises) + "}"
-        return str(str_premises2) + "=>" + str(self.conclusion)
 
 class Rule:
     def __init__(self, premises : Set[Term], conclusion: Term):
