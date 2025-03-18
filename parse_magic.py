@@ -45,10 +45,7 @@ class SourceFile:
             self.reststr = next(self.fileobj).strip()
             self.current_line += 1
 
-        tokens = self.reststr.split(" ")
-        next_token = tokens[0]
-        self.reststr = " ".join(tokens[1:])
-
+        next_token, _, self.reststr = self.reststr.partition(" ")
         return next_token
 
 class UglyHeader:
