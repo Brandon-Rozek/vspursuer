@@ -4,7 +4,7 @@ Parses the Magic Ugly Data File Format
 Assumes the base logic is R with no extra connectives
 """
 import re
-from typing import TextIO, List, Optional, Tuple, Set, Dict
+from typing import TextIO, List, Iterator, Optional, Tuple, Set, Dict
 
 from model import Model, ModelValue, ModelFunction, OrderTable
 from logic import (
@@ -167,8 +167,7 @@ def derive_stages(header: UglyHeader) -> Stages:
 
     return stages
 
-def parse_matrices(infile: SourceFile) -> List[Tuple[Model, Dict]]:
-    solutions = []
+def parse_matrices(infile: SourceFile) -> Iterator[Tuple[Model, Dict[Operation, ModelFunction]]]:
     header = parse_header(infile)
     stages = derive_stages(header)
     first_run = True
@@ -179,7 +178,7 @@ def parse_matrices(infile: SourceFile) -> List[Tuple[Model, Dict]]:
             case "end":
                 break
             case "process_model":
-                process_model(stages.name(), current_model_parts, solutions)
+                yield process_model(stages.name(), current_model_parts)
                 stage = stage.next
             case "size":
                 processed = process_sizes(infile, current_model_parts, first_run)
@@ -244,8 +243,6 @@ def parse_matrices(infile: SourceFile) -> List[Tuple[Model, Dict]]:
                 else:
                     stages.reset_after(stage.name)
                     stage = stage.previous
-
-    return solutions
 
 def process_sizes(infile: SourceFile, current_model_parts: ModelBuilder, first_run: bool) -> bool:
     try:
@@ -325,7 +322,7 @@ def process_custom_connective(infile: SourceFile, symbol: str, adicity: int, cur
     current_model_parts.custom_model_functions[symbol] = mfunction
     return True
 
-def process_model(model_name: str, mp: ModelBuilder,  solutions: List[Tuple[Model, Dict]]):
+def process_model(model_name: str, mp: ModelBuilder) -> Tuple[Model, Dict[Operation, ModelFunction]]:
     """Create Model"""
     assert mp.size > 0
     assert mp.size + 1 == len(mp.carrier_set)
@@ -333,7 +330,6 @@ def process_model(model_name: str, mp: ModelBuilder,  solutions: List[Tuple[Mode
     assert mp.mimplication is not None
 
     logical_operations = { mp.mimplication }
-    model = Model(mp.carrier_set, logical_operations, mp.designated_values, ordering=mp.ordering, name=model_name)
     interpretation = {
         Implication: mp.mimplication
     }
@@ -355,8 +351,10 @@ def process_model(model_name: str, mp: ModelBuilder,  solutions: List[Tuple[Mode
             logical_operations.add(custom_mf)
             op = Operation(custom_mf.operation_name, custom_mf.arity)
             interpretation[op] = custom_mf
+    
+    model = Model(mp.carrier_set, logical_operations, mp.designated_values, ordering=mp.ordering, name=model_name)
+    return (model, interpretation)
 
-    solutions.append((model, interpretation))
 
 def parse_header(infile: SourceFile) -> UglyHeader:
     """
