@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-from os import process_cpu_count
+
+# NOTE: Perhaps we should use process_cpu_count but that's not available to all Python versions
+from os import cpu_count
 from time import sleep
 from typing import Dict, Iterator, Optional, Tuple
 import argparse
@@ -64,7 +66,7 @@ if __name__ == "__main__":
 
     num_cpu = args.get("c")
     if num_cpu is None:
-        num_cpu = max(process_cpu_count() - 2, 1)
+        num_cpu = max(cpu_count() - 2, 1)
 
     # Set up parallel verification
     num_tested = 0
@@ -110,6 +112,8 @@ if __name__ == "__main__":
                     except StopIteration:
                         done_parsing = True
                 else:
+                    # Otherwise the task is still working,
+                    # add it to the next task pool
                     next_task_pool.append(result_async)
             task_pool = next_task_pool
             sleep(0.01)
