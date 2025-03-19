@@ -45,26 +45,6 @@ def has_vsp_plus_model(model, impfunction, mconjunction, mdisjunction, mnegation
         return (model, vsp_result)
     return (None, vsp_result)
 
-def create_chunks(data, chunk_size: int):
-    """
-    Takes a stream of data and creates a new
-    stream where each element is a "chunk" of
-    several primitive elements.
-    Ex: create_chunks((1, 2, 3, 4, 5, 6), 2) ->
-    ((1, 2), (3, 4), (5, 6))
-    """
-    chunk = []
-    for item in data:
-        chunk.append(item)
-        if len(chunk) == chunk_size:
-            yield tuple(chunk)
-            chunk = []
-
-    if len(chunk) > 0:
-        yield tuple(chunk)
-
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="VSP Checker")
     parser.add_argument("--verbose", action='store_true', help="Print out all parsed matrices")
@@ -85,8 +65,6 @@ if __name__ == "__main__":
     num_cpu = args.get("c")
     if num_cpu is None:
         num_cpu = max(process_cpu_count() - 2, 1)
-
-    # solution_chunks = create_chunks(solutions, num_cpu * 2)
 
     # Set up parallel verification
     num_tested = 0
