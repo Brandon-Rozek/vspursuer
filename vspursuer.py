@@ -139,7 +139,7 @@ if __name__ == "__main__":
             result = result_queue.get(True, 60)
         except QueueEmpty:
             # Health check in case processes crashed
-            num_dead = 0 
+            num_dead = 0
             for p in processes:
                 if not p.is_alive():
                     num_dead += 1
@@ -174,10 +174,24 @@ if __name__ == "__main__":
         if done_parsing:
             continue
 
-        added = add_to_queue(solutions, task_queue, num_cpu)
-        if not added:
-            done_parsing = True
+        # NOTE: We should attempt to maintain a decent amount
+        # of work in the task queue so that workers stay busy
+        task_queue_size: Optional[int] = None
+        try:
+            task_queue_size = task_queue.qsize()
+        except NotImplementedError:
+            # On MacOS this isn't implemented
+            pass
 
+        num_new_tasks = 1
+        if task_queue_size is not None and task_queue_size < num_cpu * 2:
+            num_new_tasks = (num_cpu * 2) - task_queue_size
+
+        for _ in range(num_new_tasks):
+            added = add_to_queue(solutions, task_queue, num_cpu)
+            if not added:
+                done_parsing = True
+                break
 
     print(f"Tested {num_tested} models, {num_has_vsp} of which satisfy VSP")
 
