@@ -121,8 +121,10 @@ if __name__ == "__main__":
         p.start()
 
     # Populate initial task queue
+    # NOTE: Adding more than number of processes
+    # to make sure there's always work to do.
     done_parsing = False
-    for _ in range(num_cpu):
+    for _ in range(num_cpu * 2):
         added = add_to_queue(solutions, task_queue, num_cpu)
         if not added:
             done_parsing = True
@@ -137,9 +139,15 @@ if __name__ == "__main__":
             result = result_queue.get(True, 60)
         except QueueEmpty:
             # Health check in case processes crashed
-            if all((not p.is_alive() for p in processes)):
-                print("[WARNING] No child processes remain")
+            num_dead = 0 
+            for p in processes:
+                if not p.is_alive():
+                    num_dead += 1
+            if num_dead == len(processes):
+                print("[ERROR] No child processes remain")
                 break
+            elif num_dead > 0:
+                print("[WARNING] Number of dead processes:", num_dead)
             # Otherwise continue
             continue
 
