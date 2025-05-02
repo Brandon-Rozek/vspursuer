@@ -10,9 +10,9 @@ import multiprocessing as mp
 from logic import Conjunction, Disjunction, Negation, Implication, Operation
 from model import Model, ModelFunction
 from parse_magic import SourceFile, parse_matrices
-from vsp import has_vsp
+from vsp import has_vsp, VSP_Result
 
-def restructure_solutions(solutions: Iterator[Tuple[Model, Dict[Operation, ModelFunction]]], args) -> \
+def restructure_solutions(solutions: Iterator[Tuple[Model, Dict[Operation, ModelFunction]]], skip_to: Optional[str]) -> \
     Iterator[Tuple[Model, ModelFunction, Optional[ModelFunction], Optional[ModelFunction], Optional[ModelFunction]]]:
     """
     When subprocess gets spawned, the logical operations will
@@ -22,28 +22,31 @@ def restructure_solutions(solutions: Iterator[Tuple[Model, Dict[Operation, Model
     While we're at it, filter out models until we get to --skip-to
     if applicable.
     """
-    start_processing = args.get("skip_to") is None
+    start_processing = skip_to is None
     for model, interpretation in solutions:
         # If skip_to is defined, then don't process models
         # until then.
-        if not start_processing and model.name == args.get("skip_to"):
-            start_processing = True
-        if not start_processing:
+        if not start_processing and model.name != skip_to:
             continue
+        start_processing = True
+
+        # NOTE: Implication must be defined, the rest may not
         impfunction = interpretation[Implication]
         mconjunction = interpretation.get(Conjunction)
         mdisjunction = interpretation.get(Disjunction)
         mnegation = interpretation.get(Negation)
         yield (model, impfunction, mconjunction, mdisjunction, mnegation)
 
-def has_vsp_plus_model(model, impfunction, mconjunction, mdisjunction, mnegation):
+def has_vsp_plus_model(model, impfunction, mconjunction, mdisjunction, mnegation) -> Tuple[Optional[Model], VSP_Result]:
     """
     Wrapper which also stores the models along with its vsp result
     """
     vsp_result = has_vsp(model, impfunction, mconjunction, mdisjunction, mnegation)
+    # NOTE: Memory optimization - Don't return model if it doens't have VSP
+    model = model if vsp_result.has_vsp else None
     return (model, vsp_result)
 
-def worker_vsp(task_queue, result_queue):
+def worker_vsp(task_queue: mp.Queue, result_queue: mp.Queue):
     """
     Worker process which processes models from the task
     queue and adds the result to the result_queue.
@@ -65,7 +68,7 @@ def worker_vsp(task_queue, result_queue):
         # Push sentinal value
         result_queue.put(None)
 
-def worker_parser(data_file_path, num_sentinal_values, task_queue):
+def worker_parser(data_file_path: str, num_sentinal_values: int, task_queue: mp.Queue, skip_to: Optional[str]):
     """
     Function which parses the MaGIC file
     and adds models to the task_queue.
@@ -75,7 +78,7 @@ def worker_parser(data_file_path, num_sentinal_values, task_queue):
     try:
         data_file = open(data_file_path, "r")
         solutions = parse_matrices(SourceFile(data_file))
-        solutions = restructure_solutions(solutions, args)
+        solutions = restructure_solutions(solutions, skip_to)
 
         while True:
             try:
@@ -118,7 +121,7 @@ if __name__ == "__main__":
     result_queue = mp.Queue()
 
     # Create dedicated process to parse the MaGIC file
-    process_parser = mp.Process(target=worker_parser, args=(data_file_path, num_workers, task_queue))
+    process_parser = mp.Process(target=worker_parser, args=(data_file_path, num_workers, task_queue, args.get("skip_to")))
     process_parser.start()
 
     # Create dedicated processes which check VSP

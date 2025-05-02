@@ -103,6 +103,9 @@ def binary_function_str(f: ModelFunction) -> str:
 
 Interpretation = Dict[Operation, ModelFunction]
 
+# TODO: Replace with a nicer representation
+# Include meet and join functions
+# Something like x : (all elements less than x)
 class OrderTable:
     def __init__(self):
         self.ordering = set()
