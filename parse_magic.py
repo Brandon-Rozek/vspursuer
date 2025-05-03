@@ -72,6 +72,45 @@ class ModelBuilder:
         # Map symbol to model function
         self.custom_model_functions: Dict[str,  ModelFunction] = {}
 
+    def build(self, model_name: str) -> Tuple[Model, Dict[Operation, ModelFunction]]:
+        """Create Model"""
+        assert self.size > 0
+        assert self.size + 1 == len(self.carrier_list)
+        assert len(self.designated_values) <= len(self.carrier_list)
+        assert self.mimplication is not None
+
+        # Implication is required to be present
+        logical_operations = { self.mimplication }
+        interpretation = {
+            Implication: self.mimplication
+        }
+
+        # Other model functions and logical
+        # operations are optional
+        if self.mnegation is not None:
+            logical_operations.add(self.mnegation)
+            interpretation[Negation] = self.mnegation
+        if self.mconjunction is not None:
+            logical_operations.add(self.mconjunction)
+            interpretation[Conjunction] = self.mconjunction
+        if self.mdisjunction is not None:
+            logical_operations.add(self.mdisjunction)
+            interpretation[Disjunction] = self.mdisjunction
+        if self.mnecessitation is not None:
+            logical_operations.add(self.mnecessitation)
+            interpretation[Necessitation] = self.mnecessitation
+
+        # Custom model function definitions
+        for custom_mf in self.custom_model_functions.values():
+            if custom_mf is not None:
+                logical_operations.add(custom_mf)
+                op = Operation(custom_mf.operation_name, custom_mf.arity)
+                interpretation[op] = custom_mf
+
+        model = Model(set(self.carrier_list), logical_operations, self.designated_values, ordering=self.ordering, name=model_name)
+        return (model, interpretation)
+
+
 class Stage:
     def __init__(self, name: str):
         self.name = name
@@ -194,7 +233,7 @@ def parse_matrices(infile: SourceFile) -> Iterator[Tuple[Model, Dict[Operation, 
             case "end":
                 break
             case "process_model":
-                yield process_model(stages.name(), current_model_parts)
+                yield current_model_parts.build(stages.name())
                 stage = stage.next
             case "size":
                 processed = process_sizes(infile, current_model_parts, first_run)
@@ -300,7 +339,7 @@ def process_orders(infile: SourceFile, current_model_parts: ModelBuilder) -> boo
 
 def process_designateds(infile: SourceFile, current_model_parts: ModelBuilder) -> bool:
     """Stage 4"""
-    designated_values = parse_single_designated(infile, current_model_parts.size)
+    designated_values = parse_single_designated(infile, current_model_parts.size, current_model_parts.carrier_list)
     if designated_values is None:
         return False
 
@@ -309,7 +348,7 @@ def process_designateds(infile: SourceFile, current_model_parts: ModelBuilder) -
 
 def process_implications(infile: SourceFile, current_model_parts: ModelBuilder) -> bool:
     """Stage 5"""
-    mimplication = parse_single_dyadic_connective(infile, "→", current_model_parts.size)
+    mimplication = parse_single_dyadic_connective(infile, "→", current_model_parts.size, current_model_parts.carrier_list)
     if mimplication is None:
         return False
 
@@ -330,7 +369,7 @@ def process_custom_connective(infile: SourceFile, symbol: str, adicity: int, cur
     elif adicity == 1:
         mfunction = parse_single_monadic_connective(infile, symbol, current_model_parts.size, current_model_parts.carrier_list)
     elif adicity == 2:
-        mfunction = parse_single_dyadic_connective(infile, symbol, current_model_parts.size)
+        mfunction = parse_single_dyadic_connective(infile, symbol, current_model_parts.size, current_model_parts.carrier_list)
     else:
         raise NotImplementedError("Unable to process connectives of adicity greater than 2")
 
@@ -339,39 +378,6 @@ def process_custom_connective(infile: SourceFile, symbol: str, adicity: int, cur
 
     current_model_parts.custom_model_functions[symbol] = mfunction
     return True
-
-def process_model(model_name: str, mp: ModelBuilder) -> Tuple[Model, Dict[Operation, ModelFunction]]:
-    """Create Model"""
-    assert mp.size > 0
-    assert mp.size + 1 == len(mp.carrier_list)
-    assert len(mp.designated_values) <= len(mp.carrier_list)
-    assert mp.mimplication is not None
-
-    logical_operations = { mp.mimplication }
-    interpretation = {
-        Implication: mp.mimplication
-    }
-    if mp.mnegation is not None:
-        logical_operations.add(mp.mnegation)
-        interpretation[Negation] = mp.mnegation
-    if mp.mconjunction is not None:
-        logical_operations.add(mp.mconjunction)
-        interpretation[Conjunction] = mp.mconjunction
-    if mp.mdisjunction is not None:
-        logical_operations.add(mp.mdisjunction)
-        interpretation[Disjunction] = mp.mdisjunction
-    if mp.mnecessitation is not None:
-        logical_operations.add(mp.mnecessitation)
-        interpretation[Necessitation] = mp.mnecessitation
-
-    for custom_mf in mp.custom_model_functions.values():
-        if custom_mf is not None:
-            logical_operations.add(custom_mf)
-            op = Operation(custom_mf.operation_name, custom_mf.arity)
-            interpretation[op] = custom_mf
-
-    model = Model(set(mp.carrier_list), logical_operations, mp.designated_values, ordering=mp.ordering, name=model_name)
-    return (model, interpretation)
 
 
 def parse_header(infile: SourceFile) -> UglyHeader:
@@ -406,7 +412,6 @@ def parse_size(infile: SourceFile, first_run: bool) -> Optional[int]:
     """
     Parse the line representing the matrix size.
     """
-
     size = int(infile.next_line())
 
     # HACK: When necessitation and custom connectives are enabled
@@ -417,7 +422,9 @@ def parse_size(infile: SourceFile, first_run: bool) -> Optional[int]:
 
     if size == -1:
         return None
+
     assert size > 0, f"Unexpected size at line {infile.line_in_file}"
+
     return size
 
 def mvalue_from_index(i: int) -> ModelValue:
@@ -433,55 +440,9 @@ def parse_mvalue(x: str) -> ModelValue:
     """
     return mvalue_from_index(int(x))
 
-def determine_cresult(size: int, ordering: Dict[ModelValue, ModelValue], a: ModelValue, b: ModelValue) -> ModelValue:
-    """
-    Determine what a ∧ b should be given the ordering table.
-    """
-    for i in range(size + 1):
-        c = mvalue_from_index(i)
 
-        if not ordering[(c, a)]:
-            continue
-        if not ordering[(c, b)]:
-            continue
-
-        invalid = False
-        for j in range(size + 1):
-            d = mvalue_from_index(j)
-            if c == d:
-                continue
-            if ordering[(c, d)]:
-                if ordering[(d, a)] and ordering [(d, b)]:
-                    invalid = True
-
-        if not invalid:
-            return c
-
-def determine_dresult(size: int, ordering: Dict[ModelValue, ModelValue], a: ModelValue, b: ModelValue) -> ModelValue:
-    """
-    Determine what a ∨ b should be given the ordering table.
-    """
-    for i in range(size + 1):
-        c = mvalue_from_index(i)
-        if not ordering[(a, c)]:
-            continue
-        if not ordering[(b, c)]:
-            continue
-
-        invalid = False
-
-        for j in range(size + 1):
-            d = mvalue_from_index(j)
-            if d == c:
-                continue
-            if ordering[(d, c)]:
-                if ordering[(a, d)] and ordering[(b, d)]:
-                    invalid = True
-
-        if not invalid:
-            return c
-
-def parse_single_order(infile: SourceFile, size: int, carrier_list: List[ModelValue]) -> Optional[Tuple[OrderTable, ModelFunction, ModelFunction]]:
+def parse_single_order(infile: SourceFile, size: int, carrier_list: List[ModelValue]) -> Optional[
+    Tuple[OrderTable, Optional[ModelFunction], Optional[ModelFunction]]]:
     """
     Parse the line representing the ordering table
     """
@@ -509,21 +470,12 @@ def parse_single_order(infile: SourceFile, size: int, carrier_list: List[ModelVa
     for x, y in product(carrier_list, carrier_list):
         cresult = ordering.meet(x, y)
         if cresult is None:
-            print("[Warning] Conjunction and Disjunction are not well-defined")
-            print(f"{x} ∧ {y} = ??")
-            return None, None
-        else:
-            print(f"{x} ∧ {y} = {cresult}")
+            return ordering, None, None
         cmapping[(x, y)] = cresult
 
         dresult = ordering.join(x, y)
-        # dresult = determine_dresult(size, omapping, x, y)
         if dresult is None:
-            print("[Warning] Conjunction and Disjunction are not well-defined")
-            print(f"{x} ∨ {y} = ??")
-            return None, None
-        else:
-            print(f"{x} ∨ {y} = {dresult}")
+            return ordering, None, None
         dmapping[(x, y)] = dresult
 
     mconjunction = ModelFunction(2, cmapping, "∧")
@@ -531,7 +483,7 @@ def parse_single_order(infile: SourceFile, size: int, carrier_list: List[ModelVa
 
     return ordering, mconjunction, mdisjunction
 
-def parse_single_designated(infile: SourceFile, size: int) -> Optional[Set[ModelValue]]:
+def parse_single_designated(infile: SourceFile, size: int, carrier_list: List[ModelValue]) -> Optional[Set[ModelValue]]:
     """
     Parse the line representing which model values are designated.
     """
@@ -544,9 +496,8 @@ def parse_single_designated(infile: SourceFile, size: int) -> Optional[Set[Model
 
     designated_values = set()
 
-    for i, j in zip(range(size + 1), row):
+    for x, j in zip(carrier_list, row):
         if j == '1':
-            x = mvalue_from_index(i)
             designated_values.add(x)
 
     return designated_values
@@ -579,7 +530,7 @@ def parse_single_monadic_connective(infile: SourceFile, symbol: str, size: int, 
 
     return ModelFunction(1, mapping, symbol)
 
-def parse_single_dyadic_connective(infile: SourceFile, symbol: str, size: int) -> Optional[ModelFunction]:
+def parse_single_dyadic_connective(infile: SourceFile, symbol: str, size: int, carrier_list: List[ModelValue]) -> Optional[ModelFunction]:
     first_token = next(infile)
     if first_token == "-1":
         return None
@@ -588,20 +539,14 @@ def parse_single_dyadic_connective(infile: SourceFile, symbol: str, size: int) -
     try:
         table = [first_token] + [next(infile) for _ in range((size + 1)**2 - 1)]
     except StopIteration:
-        pass
-
-    assert len(table) == (size + 1)**2, f"{symbol} table does not match expected size at line {infile.line_in_file}"
+        raise Exception(f"{symbol} table does not match expected size at line {infile.line_in_file}")
 
     mapping = {}
     table_i = 0
-    for i in range(size + 1):
-        x = mvalue_from_index(i)
-        for j in range(size + 1):
-            y = mvalue_from_index(j)
 
-            r = parse_mvalue(table[table_i])
-            table_i += 1
-
-            mapping[(x, y)] = r
+    for x, y in product(carrier_list, carrier_list):
+        r = parse_mvalue(table[table_i])
+        table_i += 1
+        mapping[(x, y)] = r
 
     return ModelFunction(2, mapping, symbol)

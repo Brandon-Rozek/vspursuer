@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 
-# NOTE: Perhaps we should use process_cpu_count but that's not available to all Python versions
-from os import cpu_count
+from datetime import datetime
 from typing import Dict, Iterator, Optional, Tuple
 from queue import Empty as QueueEmpty
 import argparse
 import multiprocessing as mp
 
-from logic import Conjunction, Disjunction, Negation, Implication, Operation
+from logic import Negation, Implication, Operation
 from model import Model, ModelFunction
 from parse_magic import SourceFile, parse_matrices
 from vsp import has_vsp, VSP_Result
+
+def print_with_timestamp(message):
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{current_time}] {message}")
 
 def restructure_solutions(solutions: Iterator[Tuple[Model, Dict[Operation, ModelFunction]]], skip_to: Optional[str]) -> \
     Iterator[Tuple[Model, ModelFunction, Optional[ModelFunction], Optional[ModelFunction], Optional[ModelFunction]]]:
@@ -32,17 +35,15 @@ def restructure_solutions(solutions: Iterator[Tuple[Model, Dict[Operation, Model
 
         # NOTE: Implication must be defined, the rest may not
         impfunction = interpretation[Implication]
-        mconjunction = interpretation.get(Conjunction)
-        mdisjunction = interpretation.get(Disjunction)
-        mnegation = interpretation.get(Negation)
-        yield (model, impfunction, mconjunction, mdisjunction, mnegation)
+        negation_defined = Negation in interpretation
+        yield (model, impfunction, negation_defined)
 
-def has_vsp_plus_model(model, impfunction, mconjunction, mdisjunction, mnegation) -> Tuple[Optional[Model], VSP_Result]:
+def has_vsp_plus_model(model, impfunction, negation_defined) -> Tuple[Optional[Model], VSP_Result]:
     """
     Wrapper which also stores the models along with its vsp result
     """
-    vsp_result = has_vsp(model, impfunction, mconjunction, mdisjunction, mnegation)
-    # NOTE: Memory optimization - Don't return model if it doens't have VSP
+    vsp_result = has_vsp(model, impfunction, negation_defined)
+    # NOTE: Memory optimization - Don't return model if it doesn't have VSP
     model = model if vsp_result.has_vsp else None
     return (model, vsp_result)
 
@@ -60,8 +61,8 @@ def worker_vsp(task_queue: mp.Queue, result_queue: mp.Queue):
             # If sentinal value, break
             if task is None:
                 break
-            (model, impfunction, mconjunction, mdisjunction, mnegation) = task
-            result = has_vsp_plus_model(model, impfunction, mconjunction, mdisjunction, mnegation)
+            (model, impfunction, negation_defined) = task
+            result = has_vsp_plus_model(model, impfunction, negation_defined)
             result_queue.put(result)
     finally:
         # Either an exception occured or the worker finished
@@ -91,37 +92,22 @@ def worker_parser(data_file_path: str, num_sentinal_values: int, task_queue: mp.
         for _ in range(num_sentinal_values):
             task_queue.put(None)
 
+def multi_process_runner(num_cpu: int, data_file_path: str, skip_to: Optional[str]):
+    """
+    Run VSPursuer in a multi-process configuration.
+    """
+    assert num_cpu > 1
 
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="VSP Checker")
-    parser.add_argument("--verbose", action='store_true', help="Print out all parsed matrices")
-    parser.add_argument("-i", type=str, help="Path to MaGIC ugly data file")
-    parser.add_argument("-c", type=int, help="Number of CPUs to use. Default: MAX - 2.")
-    parser.add_argument("--skip-to", type=str, help="Skip until a model name is found and process from then onwards.")
-    args = vars(parser.parse_args())
-
-    data_file_path = args.get("i")
-    if data_file_path is None:
-        data_file_path = input("Path to MaGIC Ugly Data File: ")
-
-
-    num_cpu = args.get("c")
-    if num_cpu is None:
-        num_cpu = max(cpu_count() - 2, 1)
-
-    # Set up parallel verification
     num_tested = 0
     num_has_vsp = 0
-    num_workers = max(num_cpu - 1, 1)
+    num_workers = num_cpu - 1
 
     # Create queues
     task_queue = mp.Queue(maxsize=1000)
     result_queue = mp.Queue()
 
     # Create dedicated process to parse the MaGIC file
-    process_parser = mp.Process(target=worker_parser, args=(data_file_path, num_workers, task_queue, args.get("skip_to")))
+    process_parser = mp.Process(target=worker_parser, args=(data_file_path, num_workers, task_queue, skip_to))
     process_parser.start()
 
     # Create dedicated processes which check VSP
@@ -135,7 +121,6 @@ if __name__ == "__main__":
     # Check results and add new tasks until finished
     result_sentinal_count = 0
     while True:
-
         # Read a result
         try:
             result = result_queue.get(True, 60)
@@ -171,7 +156,7 @@ if __name__ == "__main__":
 
         # Process result
         model, vsp_result = result
-        print(vsp_result)
+        print_with_timestamp(vsp_result)
         num_tested += 1
 
         if vsp_result.has_vsp:
@@ -180,7 +165,47 @@ if __name__ == "__main__":
         if vsp_result.has_vsp:
             num_has_vsp += 1
 
+    print_with_timestamp(f"Tested {num_tested} models, {num_has_vsp} of which satisfy VSP")
 
-    print(f"Tested {num_tested} models, {num_has_vsp} of which satisfy VSP")
+def single_process_runner(data_file_path: str, skip_to: Optional[str]):
+    num_tested = 0
+    num_has_vsp = 0
+
+    data_file = open(data_file_path, "r")
+    solutions = parse_matrices(SourceFile(data_file))
+    solutions = restructure_solutions(solutions, skip_to)
+
+    for model, impfunction, negation_defined in solutions:
+        model, vsp_result = has_vsp_plus_model(model, impfunction, negation_defined)
+        print_with_timestamp(vsp_result)
+        num_tested += 1
+
+        if vsp_result.has_vsp:
+            print(model)
+
+        if vsp_result.has_vsp:
+            num_has_vsp += 1
+
+    print_with_timestamp(f"Tested {num_tested} models, {num_has_vsp} of which satisfy VSP")
 
 
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="VSP Checker")
+    parser.add_argument("--verbose", action='store_true', help="Print out all parsed matrices")
+    parser.add_argument("-i", type=str, help="Path to MaGIC ugly data file")
+    parser.add_argument("-c", type=int, help="Number of CPUs to use. Default: 1")
+    parser.add_argument("--skip-to", type=str, help="Skip until a model name is found and process from then onwards.")
+    args = vars(parser.parse_args())
+
+    data_file_path = args.get("i")
+    if data_file_path is None:
+        data_file_path = input("Path to MaGIC Ugly Data File: ")
+
+    num_cpu = args.get("c")
+    if num_cpu is None:
+        num_cpu = 1
+
+    if num_cpu == 1:
+        single_process_runner(data_file_path, args.get("skip_to"))
+    else:
+        multi_process_runner(num_cpu, data_file_path, args.get("skip_to"))
