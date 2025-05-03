@@ -108,16 +108,58 @@ Interpretation = Dict[Operation, ModelFunction]
 # Something like x : (all elements less than x)
 class OrderTable:
     def __init__(self):
-        self.ordering = set()
+        # a : {x | x <= a }
+        self.ordering: Dict[ModelValue, Set[ModelValue]] = defaultdict(set)
 
     def add(self, x, y):
         """
         Add x <= y
         """
-        self.ordering.add((x, y))
+        self.ordering[y].add(x)
 
     def is_lt(self, x, y):
-        return (x, y) in self.ordering
+        return y in self.ordering[x]
+
+    def meet(self, x, y) -> Optional[ModelValue]:
+        X = self.ordering[x]
+        Y = self.ordering[y]
+
+        candidates = X.intersection(Y)
+
+        for m in candidates:
+            gt_all_candidates = True
+            for w in candidates:
+                if not self.is_lt(w, m):
+                    gt_all_candidates = False
+                    break
+
+            if gt_all_candidates:
+                return m
+
+        # Otherwise the meet does not exist
+        print("Meet does not exist", (x, y), candidates)
+        return None
+
+    def join(self, x, y) -> Optional[ModelValue]:
+        # Grab the collection of elements greater than x and y
+        candidates = set()
+        for w in self.ordering:
+            if self.is_lt(x, w) and self.is_lt(y, w):
+                candidates.add(w)
+
+        for j in candidates:
+            lt_all_candidates = True
+            for w in candidates:
+                if not self.is_lt(j, w):
+                    lt_all_candidates = False
+                    break
+
+            if lt_all_candidates:
+                return j
+
+        # Otherwise the join does not exist
+        print("Join does not exist", (x, y), candidates)
+        return None
 
 
 class Model:

@@ -507,18 +507,23 @@ def parse_single_order(infile: SourceFile, size: int, carrier_list: List[ModelVa
     dmapping = {}
 
     for x, y in product(carrier_list, carrier_list):
-        cresult = determine_cresult(size, omapping, x, y)
+        cresult = ordering.meet(x, y)
         if cresult is None:
             print("[Warning] Conjunction and Disjunction are not well-defined")
             print(f"{x} ∧ {y} = ??")
             return None, None
+        else:
+            print(f"{x} ∧ {y} = {cresult}")
         cmapping[(x, y)] = cresult
 
-        dresult = determine_dresult(size, omapping, x, y)
+        dresult = ordering.join(x, y)
+        # dresult = determine_dresult(size, omapping, x, y)
         if dresult is None:
             print("[Warning] Conjunction and Disjunction are not well-defined")
             print(f"{x} ∨ {y} = ??")
             return None, None
+        else:
+            print(f"{x} ∨ {y} = {dresult}")
         dmapping[(x, y)] = dresult
 
     mconjunction = ModelFunction(2, cmapping, "∧")
