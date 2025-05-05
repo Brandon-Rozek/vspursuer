@@ -145,6 +145,9 @@ def multi_process_runner(num_cpu: int, data_file_path: str, skip_to: Optional[st
                 for _ in range(num_workers):
                     task_queue.put(None)
 
+            # Don't do anymore work, wait again for a result
+            continue
+
 
         # When we receive None, it means a child process has finished
         if result is None:
