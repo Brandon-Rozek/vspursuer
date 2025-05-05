@@ -78,16 +78,11 @@ def quick_vsp_unsat_incomplete(xs, ys, model, top, bottom, negation_defined) -> 
     # skip this pair
     if top is not None and top in ys:
         return True
+    if negation_defined and bottom is not None and bottom in ys:
+        return True
     if bottom is not None and bottom in xs:
         return True
-
-    # If a subalgebra doesn't have at least one
-    # designated value, move onto the next pair.
-    # Depends on no intersection between xs and ys
-    if xs.isdisjoint(model.designated_values):
-        return True
-
-    if ys.isdisjoint(model.designated_values):
+    if negation_defined and top is not None and top in xs:
         return True
 
     # If the two subalgebras intersect, move
