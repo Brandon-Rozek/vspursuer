@@ -13,7 +13,7 @@ from vsp import has_vsp, VSP_Result
 
 def print_with_timestamp(message):
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{current_time}] {message}")
+    print(f"[{current_time}] {message}", flush=True)
 
 def restructure_solutions(solutions: Iterator[Tuple[Model, Dict[Operation, ModelFunction]]], skip_to: Optional[str]) -> \
     Iterator[Tuple[Model, ModelFunction, Optional[ModelFunction], Optional[ModelFunction], Optional[ModelFunction]]]:
