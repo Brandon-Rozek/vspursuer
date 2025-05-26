@@ -106,7 +106,7 @@ designated_values = {a1}
 logical_operations = {
     mnegation, mimplication, mconjunction, mdisjunction
 }
-R_model_2 = Model(carrier_set, logical_operations, designated_values, "R2")
+R_model_2 = Model(carrier_set, logical_operations, designated_values, None, "R2")
 
 interpretation = {
     Negation: mnegation,
@@ -132,8 +132,8 @@ solutions = generate_model(R_logic, model_size, print_model=False)
 
 print(f"Found {len(solutions)} satisfiable models")
 
-for model, interpretation in solutions:
-    print(has_vsp(model, interpretation))
+# for model, interpretation in solutions:
+#     print(has_vsp(model, mimplication, True))
 
 print("*" * 30)
 
@@ -301,7 +301,7 @@ mdisjunction = ModelFunction(2, {
 logical_operations = {
     mnegation, mimplication, mconjunction, mdisjunction
 }
-R_model_6 = Model(carrier_set, logical_operations, designated_values, "R6")
+R_model_6 = Model(carrier_set, logical_operations, designated_values, None, "R6")
 
 interpretation = {
     Negation: mnegation,
@@ -312,4 +312,5 @@ interpretation = {
 
 print(R_model_6)
 print(f"Model {R_model_6.name} satisfies logic {R_logic.name}?", satisfiable(R_logic, R_model_6, interpretation))
-print(has_vsp(R_model_6, interpretation))
+# print(has_vsp(R_model_6, mimplication, True))
+
