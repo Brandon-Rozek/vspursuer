@@ -9,7 +9,10 @@ from logic import (
 )
 from collections import defaultdict
 from functools import cached_property, lru_cache, reduce
-from itertools import chain, combinations_with_replacement, permutations, product
+from itertools import (
+    chain, combinations_with_replacement,
+    permutations, product
+)
 from typing import Dict, List, Optional, Set, Tuple
 
 
@@ -355,3 +358,38 @@ def model_closure(initial_set: Set[ModelValue], mfunctions: Set[ModelFunction], 
             break
 
     return closure_set
+
+
+def model_equivalence(model1: Model, model2: Model) -> bool:
+    """
+    Takes two models and determines if they are equivalent.
+    Assumes for the model to be equilvalent that their
+    value names are equivalent as well.
+    """
+
+    if model1.carrier_set != model2.carrier_set:
+        return False
+
+    if model1.designated_values != model2.designated_values:
+        return False
+
+    model1_fn_names = set((fn.operation_name for fn in model1.logical_operations))
+    model2_fn_names = set((fn.operation_name for fn in model2.logical_operations))
+
+    if model1_fn_names != model2_fn_names:
+        return False
+
+    for fn_name in model1_fn_names:
+        fn1 = next((fn for fn in model1.logical_operations if fn.operation_name == fn_name))
+        fn2 = next((fn for fn in model2.logical_operations if fn.operation_name == fn_name))
+
+        if fn1.arity != fn2.arity:
+            return False
+
+        # Check for functional equilvance
+        # That is for all inputs in the carrier set, the outputs are the same
+        for args in product(model1.carrier_set, repeat=fn1.arity):
+            if fn1(*args) != fn2(*args):
+                return False
+
+    return True
