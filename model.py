@@ -360,7 +360,7 @@ def model_closure(initial_set: Set[ModelValue], mfunctions: Set[ModelFunction], 
     return closure_set
 
 
-def model_equivalence(model1: Model, model2: Model) -> bool:
+def model_equivalence(model1: Model, model2: Model, ignore_constants: bool = False) -> bool:
     """
     Takes two models and determines if they are equivalent.
     Assumes for the model to be equilvalent that their
@@ -373,8 +373,17 @@ def model_equivalence(model1: Model, model2: Model) -> bool:
     if model1.designated_values != model2.designated_values:
         return False
 
-    model1_fn_names = set((fn.operation_name for fn in model1.logical_operations))
-    model2_fn_names = set((fn.operation_name for fn in model2.logical_operations))
+    model1_fn_names = set()
+    for fn in model1.logical_operations:
+        if fn.arity == 0 and ignore_constants:
+            continue
+        model1_fn_names.add(fn.operation_name)
+
+    model2_fn_names = set()
+    for fn in model2.logical_operations:
+        if fn.arity == 0 and ignore_constants:
+            continue
+        model2_fn_names.add(fn.operation_name)
 
     if model1_fn_names != model2_fn_names:
         return False

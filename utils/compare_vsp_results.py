@@ -26,6 +26,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compare models that have VSP in two ugly files")
     parser.add_argument("ugly1", type=str, help="First ugly data file")
     parser.add_argument("ugly2", type=str, help="Second ugly data file")
+    parser.add_argument("--ignore-constants", action='store_true', help="When it comes to model equivalance, ignore constants")
     args = vars(parser.parse_args())
 
     data_file1 = open(args['ugly1'], "r")
@@ -35,6 +36,8 @@ if __name__ == "__main__":
     data_file2 = open(args['ugly2'], "r")
     solutions2 = parse_matrices(SourceFile(data_file2))
     solutions2 = list(restructure_solutions(solutions2, None))
+
+    ignore_constants = args.get("ignore_constants", False)
 
     # Total count of models
     total_models1 = 0
@@ -62,7 +65,7 @@ if __name__ == "__main__":
             # Check to see if model exists in file 2
             match_found_index = (False, -1)
             for i in range(len(solutions2) - 1, -1, -1):
-                if model_equivalence(model, solutions2[i][0]):
+                if model_equivalence(model, solutions2[i][0], ignore_constants):
                     match_found_index = (True, i)
                     break
 
