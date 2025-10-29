@@ -47,7 +47,7 @@ def has_vsp(model: Model, impfunction: ModelFunction,
     # x -> y does not take a designiated value
     I: List[Tuple[ModelValue, ModelValue]] = []
 
-    for (x, y) in product(model.carrier_set, model.carrier_set):
+    for (x, y) in product(model.designated_values, model.designated_values):
         if impfunction(x, y) not in model.designated_values:
             I.append((x, y))
 
