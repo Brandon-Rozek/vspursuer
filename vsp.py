@@ -3,7 +3,7 @@ Check to see if the model has the variable
 sharing property.
 """
 from itertools import product, chain, combinations
-from typing import List, Optional, Set, Tuple
+from typing import List, Generator, Optional, Set, Tuple
 from common import set_to_str
 from model import (
     Model, model_closure, ModelFunction, ModelValue
@@ -150,14 +150,15 @@ L: {set_to_str(self.L)}
 def powerset_minus_empty(s):
     return chain.from_iterable(combinations(s, r) for r in range(1, len(s) + 1))
 
-def find_k1_k2(model, impfunction: ModelFunction,
-            negation_defined: bool) -> List[Tuple[Set[ModelValue], Set[ModelValue]]]:
+def find_k1_k2(model: Model, impfunction: ModelFunction,
+            negation_defined: bool) -> Generator[Tuple[Set[ModelValue], Set[ModelValue]], None, None]:
     """
     Returns a list of possible subalgebra pairs (K1, K2)
+    for SVSP. This is less efficient than the VSP version
+    due to interaction with the L and U sets in SVSP.
     """
     assert model.ordering is not None, "Expected ordering table in model"
 
-    result = []
     top = model.ordering.top()
     bottom = model.ordering.bottom()
 
@@ -165,39 +166,47 @@ def find_k1_k2(model, impfunction: ModelFunction,
     # x -> y does not take a designiated value
     I: List[Tuple[ModelValue, ModelValue]] = []
 
-    for (x, y) in product(model.designated_values, model.designated_values):
+    for (x, y) in product(model.carrier_set, model.carrier_set):
         if impfunction(x, y) not in model.designated_values:
             I.append((x, y))
 
-    # Find the subalgebras which falsify implication
-    for xys in I:
+    Is = powerset_minus_empty(I)
 
-        xi = xys[0]
+    # Find the subalgebras which falsify implication
+    for xys in Is:
+
+        xs = {xy[0] for xy in xys}
 
         # Discard ({⊥} ∪ A', B) subalgebras
-        if bottom is not None and xi == bottom:
+        if bottom is not None and bottom in xs:
             continue
 
         # Discard ({⊤} ∪ A', B) subalgebras when negation is defined
-        if top is not None and negation_defined and xi == top:
+        if top is not None and negation_defined and top in xs:
             continue
 
-        yi = xys[1]
+        ys = {xy[1] for xy in xys}
 
         # Discard (A, {⊤} ∪ B') subalgebras
-        if top is not None and yi == top:
+        if top is not None and top in ys:
             continue
 
         # Discard (A, {⊥} ∪ B') subalgebras when negation is defined
-        if bottom is not None and negation_defined and yi == bottom:
+        if bottom is not None and negation_defined and bottom in ys:
             continue
 
-        # Discard ({a} ∪ A', {b} ∪ B') subalgebras when a <= b
-        if model.ordering.is_lt(xi, yi):
-            continue
+        order_dependent = False
+        for (xi, yi) in product(xs, ys):
+            # Discard ({a} ∪ A', {b} ∪ B') subalgebras when a <= b
+            if model.ordering.is_lt(xi, yi):
+                order_dependent = True
+                break
+            # Discard ({a} ∪ A', {b} ∪ B') subalgebras when b <= a and negation is defined
+            if negation_defined and model.ordering.is_lt(yi, xi):
+                order_dependent = True
+                break
 
-        # Discard ({a} ∪ A', {b} ∪ B') subalgebras when b <= a and negation is defined
-        if negation_defined and model.ordering.is_lt(yi, xi):
+        if order_dependent:
             continue
 
         # Compute the left closure of the set containing xi under all the operations
@@ -236,32 +245,66 @@ def find_k1_k2(model, impfunction: ModelFunction,
                 break
 
         if falsified:
-            result.append((carrier_set_left, carrier_set_right))
+            yield (carrier_set_left, carrier_set_right)
 
-    return result
+def find_candidate_u_l(
+        model: Model, impfn: ModelFunction, negfn: Optional[ModelFunction],
+        K1: Set[ModelValue], K2: Set[ModelValue]) -> Generator[Tuple[Set[ModelValue], Set[ModelValue]], None, None]:
 
-def find_candidate_u_l(model: Model, impfn: ModelFunction, negfn: Optional[ModelFunction]) -> List[Tuple[Set[ModelValue], Set[ModelValue]]]:
-    result: List[Tuple[Set[ModelValue], Set[ModelValue]]] = []
+    # Compute I the set of tuples (x, y) where
+    # x -> y does not take a designiated value
+    I: List[Tuple[ModelValue, ModelValue]] = []
+
+    if negfn is None:
+        # NOTE: K2 ∩ U = ∅ if ∀x(x → x) ∈ T
+        # NOTE: K1 ∩ L = ∅ if ∀x(x → x) ∈ T
+        for (x, y) in product(model.carrier_set - K2, model.carrier_set - K1):
+            if impfn(x, y) not in model.designated_values:
+                I.append((x, y))
+    else:
+        # NOTE: K1, K2, L, and U are pairwise distinct
+        CmK1uK2 = model.carrier_set - (K1 | K2)
+        for (x, y) in product(CmK1uK2, CmK1uK2):
+            if impfn(x, y) not in model.designated_values:
+                I.append((x, y))
+
+    Is = powerset_minus_empty(I)
     F = model.carrier_set - model.designated_values
-    Us = powerset_minus_empty(model.carrier_set)
-    Ls = powerset_minus_empty(model.carrier_set)
-    for (U, L) in product(Us, Ls):
+
+    has_double_negation_eq = False
+
+    if negfn is not None:
+        has_double_negation_eq = True
+        for x in model.carrier_set:
+            if negfn(negfn(x)) != x:
+                has_double_negation_eq = False
+                break
+
+    for ULs in Is:
         unsat = False
-        U = set(U)
-        L = set(L)
+        U = {UL[0] for UL in ULs}
+        L = {UL[1] for UL in ULs}
+
+        # U and L are distinct
+        if U.intersection(L):
+            continue
+
+        if has_double_negation_eq:
+            # NOTE: U is the negation image of L, that is, U = {¬x | x ∈ L}, if ∀x(x = ¬¬x).
+            U2 = {negfn(x) for x in L}
+            if U != U2:
+                continue
+            yield (U, L)
+
         LFi = F.intersection(L)
-        # Required property: ∀x ∈ U, y ∈ L(x → y ∈ L ∩ F)
+
         for (x, y) in product(U, L):
+            # Required property: ∀x ∈ U, y ∈ L(x → y ∈ L ∩ F)
             if impfn(x, y) not in LFi:
                 unsat = True
                 break
-
-        if unsat:
-            continue
-
-        # Required Property: ∀x ∈ L, y ∈ U(x → y ∈ U)
-        for (x, y) in product(L, U):
-            if impfn(x, y) not in U:
+            # Required Property: ∀x ∈ L, y ∈ U(x → y ∈ U)
+            if impfn(y, x) not in U:
                 unsat = True
                 break
 
@@ -288,9 +331,8 @@ def find_candidate_u_l(model: Model, impfn: ModelFunction, negfn: Optional[Model
                 continue
 
         # Passed all required properties
-        result.append((U, L))
+        yield (U, L)
 
-    return result
 
 def has_svsp(model: Model, impfn: ModelFunction,
             conjfn: Optional[ModelFunction],
@@ -309,157 +351,157 @@ def has_svsp(model: Model, impfn: ModelFunction,
     starops = [conjfn, disjfn]
 
     K1K2s = find_k1_k2(model, impfn, negfn is not None)
-    ULs = find_candidate_u_l(model, impfn, negfn)
 
-    candidates = ((k1, k2, u, l) for (k1, k2), (u, l) in product(K1K2s, ULs))
-    for K1, K2, U, L in candidates:
-        unsat = False
-        K1Uu = K1 | U
-        K1Lu = K1 | L
-        K1LuFi = K1Lu.intersection(F) # (K1 ∪ L) ∩ F
-        K2Uu = K2 | U
-        K2Lu = K2 | L
-        K2LuFi = K2Lu.intersection(F) # (K2 ∪ L) ∩ F
+    for K1, K2 in K1K2s:
+        ULs = find_candidate_u_l(model, impfn, negfn, K1, K2)
+        for U, L in ULs:
+            unsat = False
+            K1Uu = K1 | U
+            K1Lu = K1 | L
+            K1LuFi = K1Lu.intersection(F) # (K1 ∪ L) ∩ F
+            K2Uu = K2 | U
+            K2Lu = K2 | L
+            K2LuFi = K2Lu.intersection(F) # (K2 ∪ L) ∩ F
 
-        # (6)
-        for x, y in product(K1, U):
-            # b) x → y ∈ K1 ∪ U
-            if impfn(x, y) not in K1Uu:
-                unsat = True
-                break
+            # (6)
+            for x, y in product(K1, U):
+                # b) x → y ∈ K1 ∪ U
+                if impfn(x, y) not in K1Uu:
+                    unsat = True
+                    break
 
-            # c) y → x ∈ K1 ∪ L
-            if impfn(y, x) not in K1Lu:
-                unsat = True
-                break
+                # c) y → x ∈ K1 ∪ L
+                if impfn(y, x) not in K1Lu:
+                    unsat = True
+                    break
 
-            # a) x ∗ y, y ∗ x, y ∗ z ∈ K1 ∪ U
-            for z in U:
-                for op in starops:
-                    if op is not None:
-                        if op(x, y) not in K1Uu:
-                            unsat = True
-                            break
-                        if op(y, x) not in K1Uu:
-                            unsat = True
-                            break
-                        if op(y, z) not in K1Uu:
-                            unsat = True
-                            break
+                # a) x ∗ y, y ∗ x, y ∗ z ∈ K1 ∪ U
+                for z in U:
+                    for op in starops:
+                        if op is not None:
+                            if op(x, y) not in K1Uu:
+                                unsat = True
+                                break
+                            if op(y, x) not in K1Uu:
+                                unsat = True
+                                break
+                            if op(y, z) not in K1Uu:
+                                unsat = True
+                                break
+                    if unsat:
+                        break
+
+                if unsat:
+                    # Verification for these set of matrices failed
+                    break
+
+            if unsat:
+                # Move onto the next candidates K1, K2, U, L
+                continue
+
+            # (7)
+            for x, y in product(K1, L):
+                # b) x → y ∈ (K1 ∪ L) ∩ F
+                if impfn(x, y) not in K1LuFi:
+                    unsat = True
+                    break
+
+                # c) y → x ∈ K1 ∪ U
+                if impfn(y, x) not in K1Uu:
+                    unsat = True
+                    break
+
+                # a) x ∗ y, y ∗ x, y ∗ z ∈ K1 ∪ L
+                for z in L:
+                    for op in starops:
+                        if op is not None:
+                            if op(x, y) not in K1Lu:
+                                unsat = True
+                                break
+
+                            if op(y, x) not in K1Lu:
+                                unsat = True
+                                break
+
+                            if op(y, z) not in K1Lu:
+                                unsat = True
+                                break
+                    if unsat:
+                        break
+
                 if unsat:
                     break
 
             if unsat:
-                # Verification for these set of matrices failed
-                break
+                continue
 
-        if unsat:
-            # Move onto the next candidates K1, K2, U, L
-            continue
+            # (8)
+            for x, y in product(K2, U):
+                # b) x → y ∈ K2 ∪ U
+                if impfn(x, y) not in K2Uu:
+                    unsat = True
+                    break
 
-        # (7)
-        for x, y in product(K1, L):
-            # b) x → y ∈ (K1 ∪ L) ∩ F
-            if impfn(x, y) not in K1LuFi:
-                unsat = True
-                break
+                # c) y → x ∈ (K2 ∪ L) ∩ F
+                if impfn(y, x) not in K2LuFi:
+                    unsat = True
+                    break
 
-            # c) y → x ∈ K1 ∪ U
-            if impfn(y, x) not in K1Uu:
-                unsat = True
-                break
+                # a) x ∗ y, y ∗ x, y ∗ z ∈ K2 ∪ U
+                for z in U:
+                    for op in starops:
+                        if op is not None:
+                            if op(x, y) not in K2Uu:
+                                unsat = True
+                                break
+                            if op(y, x) not in K2Uu:
+                                unsat = True
+                                break
+                            if op(y, z) not in K2Uu:
+                                unsat = True
+                                break
+                    if unsat:
+                        break
 
-            # a) x ∗ y, y ∗ x, y ∗ z ∈ K1 ∪ L
-            for z in L:
-                for op in starops:
-                    if op is not None:
-                        if op(x, y) not in K1Lu:
-                            unsat = True
-                            break
-
-                        if op(y, x) not in K1Lu:
-                            unsat = True
-                            break
-
-                        if op(y, z) not in K1Lu:
-                            unsat = True
-                            break
                 if unsat:
                     break
 
             if unsat:
-                break
+                continue
 
-        if unsat:
-            continue
+            # (9)
+            for x, y in product(K2, L):
+                # b) x → y ∈ K2 ∪ L
+                if impfn(x, y) not in K2Lu:
+                    unsat = True
+                    break
 
-        # (8)
-        for x, y in product(K2, U):
-            # b) x → y ∈ K2 ∪ U
-            if impfn(x, y) not in K2Uu:
-                unsat = True
-                break
+                # c) y → x ∈ K2 ∪ U
+                if impfn(y, x) not in K2Uu:
+                    unsat = True
+                    break
 
-            # c) y → x ∈ (K2 ∪ L) ∩ F
-            if impfn(y, x) not in K2LuFi:
-                unsat = True
-                break
+                # a) x ∗ y, y ∗ x, y ∗ z ∈ K2 ∪ L
+                for z in L:
+                    for op in starops:
+                        if op is not None:
+                            if op(x, y) not in K2Lu:
+                                unsat = True
+                                break
+                            if op(y, x) not in K2Lu:
+                                unsat = True
+                                break
+                            if op(y, z) not in K2Lu:
+                                unsat = True
+                                break
+                    if unsat:
+                        break
 
-            # a) x ∗ y, y ∗ x, y ∗ z ∈ K2 ∪ U
-            for z in U:
-                for op in starops:
-                    if op is not None:
-                        if op(x, y) not in K2Uu:
-                            unsat = True
-                            break
-                        if op(y, x) not in K2Uu:
-                            unsat = True
-                            break
-                        if op(y, z) not in K2Uu:
-                            unsat = True
-                            break
                 if unsat:
                     break
 
-            if unsat:
-                break
 
-        if unsat:
-            continue
-
-        # (9)
-        for x, y in product(K2, L):
-            # b) x → y ∈ K2 ∪ L
-            if impfn(x, y) not in K2Lu:
-                unsat = True
-                break
-
-            # c) y → x ∈ K2 ∪ U
-            if impfn(y, x) not in K2Uu:
-                unsat = True
-                break
-
-            # a) x ∗ y, y ∗ x, y ∗ z ∈ K2 ∪ L
-            for z in L:
-                for op in starops:
-                    if op is not None:
-                        if op(x, y) not in K2Lu:
-                            unsat = True
-                            break
-                        if op(y, x) not in K2Lu:
-                            unsat = True
-                            break
-                        if op(y, z) not in K2Lu:
-                            unsat = True
-                            break
-                if unsat:
-                    break
-
-            if unsat:
-                break
-
-
-        if not unsat:
-            return SVSP_Result(True, model.name, K1, K2, U, L)
+            if not unsat:
+                return SVSP_Result(True, model.name, K1, K2, U, L)
 
     return SVSP_Result(False, model.name)
