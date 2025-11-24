@@ -44,35 +44,59 @@ def has_vsp(model: Model, impfunction: ModelFunction,
     bottom = model.ordering.bottom()
 
     C: Dict[ModelValue, Set[ModelValue]] = {}
-    U: Dict[ModelValue, Set[ModelValue]] = {}
-
-    for d in model.designated_values:
-        C[d] = model_closure({d,}, model.logical_operations, None)
-        U[d] = {y for y in model.designated_values if impfunction(d, y) in model.designated_values}
 
     for x in model.designated_values:
+
+        # Discard ({⊥} ∪ A', B) subalgebras
+        if bottom is not None and x == bottom:
+            continue
+
+        # Discard ({⊤} ∪ A', B) subalgebras when negation is defined
+        if top is not None and negation_defined and x == top:
+            continue
+
+        if x not in C:
+            C[x] = model_closure({x,}, model.logical_operations, None)
         Xs = C[x]
-        
+
         # Discard ({⊥} ∪ A', B) subalgebras
         if bottom is not None and bottom in Xs:
             continue
-        
+
         # Discard ({⊤} ∪ A', B) subalgebras when negation is defined
         if top is not None and negation_defined and top in Xs:
             continue
 
-        Ux = U[x]
-        for y in model.designated_values - Xs - Ux:
+        for y in model.designated_values - Xs:
+
+            # Discard (A, {⊤} ∪ B') subalgebras
+            if top is not None and y == top:
+                continue
+
+            # Discard (A, {⊥} ∪ B') subalgebras when negation is defined
+            if bottom is not None and negation_defined and y == bottom:
+                continue
+
+            # Discard ({a} ∪ A', {b} ∪ B') subalgebras when a <= b
+            if model.ordering.is_lt(x, y):
+                continue
+
+            # Discard ({a} ∪ A', {b} ∪ B') subalgebras when b <= a and negation is defined
+            if negation_defined and model.ordering.is_lt(y, x):
+                continue
+
+            if y not in C:
+                C[y] = model_closure({y,}, model.logical_operations, None)
             Ys = C[y]
 
             # Discard (A, {⊤} ∪ B') subalgebras
             if top is not None and top in Ys:
                 continue
-            
+
             # Discard (A, {⊥} ∪ B') subalgebras when negation is defined
             if bottom is not None and negation_defined and bottom in Ys:
                 continue
-            
+
             if not Xs.isdisjoint(Ys):
                 continue
 
@@ -81,8 +105,8 @@ def has_vsp(model: Model, impfunction: ModelFunction,
                 if impfunction(xi, yi) in model.designated_values:
                     falsified = False
                     break
-            
+
             if falsified:
                 return VSP_Result(True, model.name, Xs, Ys)
-    
+
     return VSP_Result(False, model.name)
