@@ -43,10 +43,10 @@ def has_vsp(model: Model, impfunction: ModelFunction,
     top = model.ordering.top()
     bottom = model.ordering.bottom()
 
+    # Cache of closures
     C: Dict[ModelValue, Set[ModelValue]] = {}
 
     for x in model.designated_values:
-
         # Discard ({⊥} ∪ A', B) subalgebras
         if bottom is not None and x == bottom:
             continue
@@ -55,19 +55,31 @@ def has_vsp(model: Model, impfunction: ModelFunction,
         if top is not None and negation_defined and x == top:
             continue
 
-        if x not in C:
-            C[x] = model_closure({x,}, model.logical_operations, None)
-        Xs = C[x]
+        candidate_ys = [y for y in model.designated_values if impfunction(x, y) not in model.designated_values]
+
+        if len(candidate_ys) == 0:
+            continue
+
+        carrier_set_left: Set[ModelValue] = model_closure(C.get(x, {x,}), model.logical_operations, bottom)
+        C[x] = carrier_set_left
 
         # Discard ({⊥} ∪ A', B) subalgebras
-        if bottom is not None and bottom in Xs:
+        if bottom is not None and bottom in carrier_set_left:
             continue
 
         # Discard ({⊤} ∪ A', B) subalgebras when negation is defined
-        if top is not None and negation_defined and top in Xs:
+        if top is not None and negation_defined and top in carrier_set_left:
             continue
+            
+        for y in candidate_ys:
+            # Discard ({a} ∪ A', {b} ∪ B') subalgebras when a <= b
+            if model.ordering.is_lt(x, y):
+                continue
 
-        for y in model.designated_values - Xs:
+            # Discard ({a} ∪ A', {b} ∪ B') subalgebras when b <= a and negation is defined
+            if negation_defined and model.ordering.is_lt(y, x):
+                continue
+
 
             # Discard (A, {⊤} ∪ B') subalgebras
             if top is not None and y == top:
@@ -77,36 +89,30 @@ def has_vsp(model: Model, impfunction: ModelFunction,
             if bottom is not None and negation_defined and y == bottom:
                 continue
 
-            # Discard ({a} ∪ A', {b} ∪ B') subalgebras when a <= b
-            if model.ordering.is_lt(x, y):
-                continue
-
-            # Discard ({a} ∪ A', {b} ∪ B') subalgebras when b <= a and negation is defined
-            if negation_defined and model.ordering.is_lt(y, x):
-                continue
-
-            if y not in C:
-                C[y] = model_closure({y,}, model.logical_operations, None)
-            Ys = C[y]
+            carrier_set_right: Set[ModelValue] = model_closure(C.get(y, {y,}), model.logical_operations, top)
+            C[y] = carrier_set_right
 
             # Discard (A, {⊤} ∪ B') subalgebras
-            if top is not None and top in Ys:
+            if top is not None and top in carrier_set_right:
                 continue
 
             # Discard (A, {⊥} ∪ B') subalgebras when negation is defined
-            if bottom is not None and negation_defined and bottom in Ys:
+            if bottom is not None and negation_defined and bottom in carrier_set_right:
                 continue
 
-            if not Xs.isdisjoint(Ys):
+            # Discard subalgebras that intersect
+            if not carrier_set_left.isdisjoint(carrier_set_right):
                 continue
 
+            # Check whether for all pairs in the subalgebra,
+            # that implication is falsified.
             falsified = True
-            for (xi, yi) in product(Xs, Ys):
-                if impfunction(xi, yi) in model.designated_values:
+            for (x2, y2) in product(carrier_set_left, carrier_set_right):
+                if impfunction(x2, y2) in model.designated_values:
                     falsified = False
                     break
 
             if falsified:
-                return VSP_Result(True, model.name, Xs, Ys)
+                return VSP_Result(True, model.name, carrier_set_left, carrier_set_right)
 
     return VSP_Result(False, model.name)
