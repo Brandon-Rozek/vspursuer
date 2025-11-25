@@ -100,17 +100,22 @@ def get_prop_var_from_term(t: Term) -> Set[PropositionalVariable]:
 
     return result
 
+def get_prop_vars_from_rule(r: Rule) -> Set[PropositionalVariable]:
+    vars: Set[PropositionalVariable] = set()
+
+    for premise in r.premises:
+        vars |= get_prop_var_from_term(premise)
+
+    vars |= get_prop_var_from_term(r.conclusion)
+
+    return vars
+
 @lru_cache
 def get_propostional_variables(rules: Tuple[Rule]) -> Set[PropositionalVariable]:
     vars: Set[PropositionalVariable] = set()
 
     for rule in rules:
-        # Get all vars in premises
-        for premise in rule.premises:
-            vars |= get_prop_var_from_term(premise)
-
-        # Get vars in conclusion
-        vars |= get_prop_var_from_term(rule.conclusion)
+        vars |= get_prop_vars_from_rule(rule)
 
     return vars
 
