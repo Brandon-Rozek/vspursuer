@@ -21,8 +21,8 @@ class VSP_Result:
 
     def __str__(self):
         if not self.has_vsp:
-            return f"Model {self.model_name} does not have the variable sharing property."
-        return f"""Model {self.model_name} has the variable sharing property.
+            return f"Matrix {self.model_name} does not have the variable sharing property."
+        return f"""Matrix {self.model_name} has the variable sharing property.
 Subalgebra 1: {set_to_str(self.subalgebra1)}
 Subalgebra 2: {set_to_str(self.subalgebra2)}
 """

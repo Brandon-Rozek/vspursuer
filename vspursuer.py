@@ -168,7 +168,7 @@ def multi_process_runner(num_cpu: int, data_file_path: str, skip_to: Optional[st
         if vsp_result.has_vsp:
             num_has_vsp += 1
 
-    print_with_timestamp(f"Tested {num_tested} models, {num_has_vsp} of which satisfy VSP")
+    print_with_timestamp(f"Tested {num_tested} matrices, {num_has_vsp} of which satisfy VSP")
 
 def single_process_runner(data_file_path: str, skip_to: Optional[str]):
     num_tested = 0
@@ -189,7 +189,7 @@ def single_process_runner(data_file_path: str, skip_to: Optional[str]):
         if vsp_result.has_vsp:
             num_has_vsp += 1
 
-    print_with_timestamp(f"Tested {num_tested} models, {num_has_vsp} of which satisfy VSP")
+    print_with_timestamp(f"Tested {num_tested} matrices, {num_has_vsp} of which satisfy VSP")
 
 
 if __name__ == "__main__":
