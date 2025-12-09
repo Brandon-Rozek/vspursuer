@@ -202,7 +202,7 @@ class Model:
 
     def __str__(self):
         result = ("=" * 25) + f"""
-Model Name: {self.name}
+Matrix Name: {self.name}
 Carrier Set: {set_to_str(self.carrier_set)}
 Designated Values: {set_to_str(self.designated_values)}
 """
