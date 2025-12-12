@@ -28,7 +28,7 @@ Subalgebra 2: {set_to_str(self.subalgebra2)}
 """
 
 def has_vsp(model: Model, impfunction: ModelFunction,
-            negation_defined: bool) -> VSP_Result:
+            negation_defined: bool, conjunction_disjunction_defined: bool) -> VSP_Result:
     """
     Checks whether a model has the variable
     sharing property.
@@ -36,6 +36,10 @@ def has_vsp(model: Model, impfunction: ModelFunction,
     # NOTE: No models with only one designated
     # value satisfies VSP
     if len(model.designated_values) == 1:
+        return VSP_Result(False, model.name)
+
+    if len(model.carrier_set) in [2,3,4,5,7] \
+        and conjunction_disjunction_defined and negation_defined:
         return VSP_Result(False, model.name)
 
     assert model.ordering is not None, "Expected ordering table in model"

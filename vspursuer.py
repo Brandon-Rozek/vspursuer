@@ -6,7 +6,7 @@ from queue import Empty as QueueEmpty
 import argparse
 import multiprocessing as mp
 
-from logic import Negation, Implication, Operation
+from logic import Conjunction, Disjunction, Implication, Negation, Operation
 from model import Model, ModelFunction
 from parse_magic import SourceFile, parse_matrices
 from vsp import has_vsp, VSP_Result
@@ -36,13 +36,14 @@ def restructure_solutions(solutions: Iterator[Tuple[Model, Dict[Operation, Model
         # NOTE: Implication must be defined, the rest may not
         impfunction = interpretation[Implication]
         negation_defined = Negation in interpretation
-        yield (model, impfunction, negation_defined)
+        conjunction_disjunction_defined = (Conjunction in interpretation) and (Disjunction in interpretation)
+        yield (model, impfunction, negation_defined, conjunction_disjunction_defined)
 
-def has_vsp_plus_model(model, impfunction, negation_defined) -> Tuple[Optional[Model], VSP_Result]:
+def has_vsp_plus_model(model, impfunction, negation_defined, conjunction_disjunction_defined) -> Tuple[Optional[Model], VSP_Result]:
     """
     Wrapper which also stores the models along with its vsp result
     """
-    vsp_result = has_vsp(model, impfunction, negation_defined)
+    vsp_result = has_vsp(model, impfunction, negation_defined, conjunction_disjunction_defined)
     # NOTE: Memory optimization - Don't return model if it doesn't have VSP
     model = model if vsp_result.has_vsp else None
     return (model, vsp_result)
@@ -61,8 +62,8 @@ def worker_vsp(task_queue: mp.Queue, result_queue: mp.Queue):
             # If sentinal value, break
             if task is None:
                 break
-            (model, impfunction, negation_defined) = task
-            result = has_vsp_plus_model(model, impfunction, negation_defined)
+            (model, impfunction, negation_defined, conjunction_disjunction_defined) = task
+            result = has_vsp_plus_model(model, impfunction, negation_defined, conjunction_disjunction_defined)
             result_queue.put(result)
     finally:
         # Either an exception occured or the worker finished
@@ -178,8 +179,8 @@ def single_process_runner(data_file_path: str, skip_to: Optional[str]):
     solutions = parse_matrices(SourceFile(data_file))
     solutions = restructure_solutions(solutions, skip_to)
 
-    for model, impfunction, negation_defined in solutions:
-        model, vsp_result = has_vsp_plus_model(model, impfunction, negation_defined)
+    for model, impfunction, negation_defined, conjunction_disjunction_defined in solutions:
+        model, vsp_result = has_vsp_plus_model(model, impfunction, negation_defined, conjunction_disjunction_defined)
         print_with_timestamp(vsp_result)
         num_tested += 1
 
