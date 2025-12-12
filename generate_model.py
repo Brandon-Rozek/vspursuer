@@ -1,6 +1,9 @@
 """
 Generate all the models for a given logic
 with a specified number of elements.
+
+NOTE: This uses a naive brute-force method which
+is extremely slow.
 """
 from common import set_to_str
 from logic import Logic, Operation, Rule, get_operations_from_term
