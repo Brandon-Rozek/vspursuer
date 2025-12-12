@@ -266,9 +266,9 @@ def satisfiable(logic: Logic, model: Model, interpretation: Dict[Operation, Mode
     pvars = tuple(get_propostional_variables(tuple(logic.rules)))
     mappings = all_model_valuations_cached(pvars, tuple(model.carrier_set))
 
-    for mapping in mappings:
-        # Make sure that the model satisfies each of the rules
-        for rule in logic.rules:
+    for rule in logic.rules:
+        # The rule most hold for all valuations
+        for mapping in mappings:
             # The check only applies if the premises are designated
             premise_met = True
             premise_ts: Set[ModelValue] = set()
@@ -290,6 +290,36 @@ def satisfiable(logic: Logic, model: Model, interpretation: Dict[Operation, Mode
             consequent_t = evaluate_term(rule.conclusion, mapping, interpretation)
             if consequent_t not in model.designated_values:
                 return False
+
+    for rule in logic.falsifies:
+        # We must find one mapping where this does not hold
+        counterexample_found = False
+        for mapping in mappings:
+            # The check only applies if the premises are designated
+            premise_met = True
+            premise_ts: Set[ModelValue] = set()
+
+            for premise in rule.premises:
+                premise_t = evaluate_term(premise, mapping, interpretation)
+                # As soon as one premise is not designated,
+                # move to the next rule.
+                if premise_t not in model.designated_values:
+                    premise_met = False
+                    break
+                # If designated, keep track of the evaluated term
+                premise_ts.add(premise_t)
+
+            if not premise_met:
+                continue
+
+            # With the premises designated, make sure the consequent is not designated
+            consequent_t = evaluate_term(rule.conclusion, mapping, interpretation)
+            if consequent_t not in model.designated_values:
+                counterexample_found = True
+                break
+
+        if not counterexample_found:
+            return False
 
     return True
 
