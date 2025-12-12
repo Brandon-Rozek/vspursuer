@@ -81,9 +81,11 @@ class Rule:
 class Logic:
     def __init__(self,
             operations: Set[Operation], rules: Set[Rule],
+            falsifies: Optional[Set[Rule]] = None,
             name: Optional[str] = None):
         self.operations = operations
         self.rules = rules
+        self.falsifies = falsifies
         self.name = str(abs(hash((
             frozenset(operations),
             frozenset(rules)
