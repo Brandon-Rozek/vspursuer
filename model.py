@@ -129,6 +129,12 @@ class OrderTable:
 
         candidates = X.intersection(Y)
 
+        if not candidates:
+            return None
+
+        if len(candidates) == 1:
+            return next(iter(candidates))
+
         # Grab all elements greater than each of the candidates
         candidate_ge_maps = (self.ge_map[candidate] for candidate in candidates)
         common_ge_values = reduce(set.intersection, candidate_ge_maps)
@@ -146,6 +152,12 @@ class OrderTable:
         Y = self.ge_map[y]
 
         candidates = X.intersection(Y)
+
+        if not candidates:
+            return None
+
+        if len(candidates) == 1:
+            return next(iter(candidates))
 
         # Grab all elements smaller than each of the candidates
         candidate_le_maps = (self.le_map[candidate] for candidate in candidates)
