@@ -187,17 +187,24 @@ class Model:
             logical_operations: Set[ModelFunction],
             designated_values: Set[ModelValue],
             ordering: Optional[OrderTable] = None,
-            name: Optional[str] = None
+            name: Optional[str] = None,
+            is_magical: Optional[bool] = False
     ):
         assert designated_values <= carrier_set
         self.carrier_set = carrier_set
         self.logical_operations = logical_operations
         self.designated_values = designated_values
         self.ordering = ordering
+        # NOTE: is_magical denotes that the model
+        # comes from the software MaGIC which
+        # means we can assume several things about
+        # it's structure. See vsp.py for it's usage.
+        self.is_magical = is_magical
         self.name = str(abs(hash((
             frozenset(carrier_set),
             frozenset(logical_operations),
-            frozenset(designated_values)
+            frozenset(designated_values),
+            is_magical
         ))))[:5] if name is None else name
 
     def __str__(self):

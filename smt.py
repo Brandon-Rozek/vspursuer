@@ -323,3 +323,57 @@ def find_all_models(logic: Logic, size: int) -> Generator[Model, None, None]:
         # Add constraint to exclude this model from future solutions
         exclusion_constraint = encoder.create_exclusion_constraint(model)
         encoder.solver.add(exclusion_constraint)
+
+class SMTModelEncoder:
+    """
+    Creates an SMT encoding for a specific Model.
+    This can be used for checking whether a model satisfies
+    various constraints.
+    """
+
+    def __init__(self, model: Model):
+        self.model = model
+        self.size = len(model.carrier_set)
+
+        # Create the Z3 context and solver
+        self.ctx = Context()
+        self.solver = Solver(ctx=self.ctx)
+
+        # Encode model values
+        model_value_names = [model_value.name for model_value in model.carrier_set]
+        self.carrier_sort, self.smt_carrier_set = EnumSort(
+            "C", model_value_names, ctx=self.ctx
+        )
+
+        # Create mapping from ModelValue to SMT element
+        self.model_value_to_smt = {
+            ModelValue(str(smt_elem)): smt_elem
+            for smt_elem in self.smt_carrier_set
+        }
+
+        # Encode model functions
+        self.model_function_map: Dict[ModelFunction, z3.FuncDeclRel] = {}
+        for model_fn in model.logical_operations:
+            smt_fn = self.create_function(model_fn.operation_name, model_fn.arity)
+            self.model_function_map[model_fn] = smt_fn
+            self.add_function_constraints_from_table(smt_fn, model_fn)
+
+
+        # Encode designated values
+        self.is_designated = self.create_predicate("D", 1)
+
+        for model_value in model.carrier_set:
+            is_designated = model_value in model.designated_values
+            self.solver.add(self.is_designated(self.model_value_to_smt[model_value]) == is_designated)
+
+    def create_predicate(self, name: str, arity: int) -> z3.FuncDeclRef:
+        return Function(name, *(self.carrier_sort for _ in range(arity)), BoolSort(ctx=self.ctx))
+
+    def create_function(self, name: str, arity: int) -> z3.FuncDeclRef:
+        return Function(name, *(self.carrier_sort for _ in range(arity + 1)))
+
+    def add_function_constraints_from_table(self, smt_fn: z3.FuncDeclRef, model_fn: ModelFunction):
+        for inputs, output in model_fn.mapping.items():
+            smt_inputs = tuple(self.model_value_to_smt[inp] for inp in inputs)
+            smt_output = self.model_value_to_smt[output]
+            self.solver.add(smt_fn(*smt_inputs) == smt_output)

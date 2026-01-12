@@ -9,6 +9,13 @@ from model import (
     Model, model_closure, ModelFunction, ModelValue
 )
 
+SMT_LOADED = True
+try:
+    from z3 import And, Or, Implies, sat
+    from smt import SMTModelEncoder
+except ImportError:
+    SMT_LOADED = False
+
 class VSP_Result:
     def __init__(
             self, has_vsp: bool, model_name: Optional[str] = None,
@@ -27,10 +34,10 @@ Subalgebra 1: {set_to_str(self.subalgebra1)}
 Subalgebra 2: {set_to_str(self.subalgebra2)}
 """
 
-def has_vsp(model: Model, impfunction: ModelFunction,
+def has_vsp_magical(model: Model, impfunction: ModelFunction,
             negation_defined: bool) -> VSP_Result:
     """
-    Checks whether a model has the variable
+    Checks whether a MaGIC model has the variable
     sharing property.
     """
     # NOTE: No models with only one designated
@@ -121,3 +128,69 @@ def has_vsp(model: Model, impfunction: ModelFunction,
             return VSP_Result(True, model.name, carrier_set_left, carrier_set_right)
 
     return VSP_Result(False, model.name)
+
+def has_vsp_smt(model: Model, impfn: ModelFunction) -> VSP_Result:
+    """
+    Checks whether a given model satisfies the variable
+    sharing property via SMT
+    """
+    if not SMT_LOADED:
+        raise Exception("Z3 is not property installed, cannot check via SMT")
+
+    encoder = SMTModelEncoder(model)
+
+    # Create predicates for our two subalgebras
+    IsInK1 = encoder.create_predicate("IsInK1", 1)
+    IsInK2 = encoder.create_predicate("IsInK2", 1)
+
+    # Enforce that our two subalgebras are non-empty
+    encoder.solver.add(Or([IsInK1(x) for x in encoder.smt_carrier_set]))
+    encoder.solver.add(Or([IsInK2(x) for x in encoder.smt_carrier_set]))
+
+    # K1/K2 are closed under the operations
+    for model_fn, smt_fn in encoder.model_function_map.items():
+        for xs in product(encoder.smt_carrier_set, repeat=model_fn.arity):
+            encoder.solver.add(
+                Implies(
+                    And([IsInK1(x) for x in xs]),
+                    IsInK1(smt_fn(*xs))
+                )
+            )
+            encoder.solver.add(
+                Implies(
+                    And([IsInK2(x) for x in xs]),
+                    IsInK2(smt_fn(*xs))
+                )
+            )
+
+    # x -> y is non-designated
+    smt_imp = encoder.model_function_map[impfn]
+    for (x, y) in product(encoder.smt_carrier_set, encoder.smt_carrier_set):
+        encoder.solver.add(
+            Implies(
+                And(IsInK1(x), IsInK2(y)),
+                encoder.is_designated(smt_imp(x, y)) == False
+            )
+        )
+
+    # Execute solver
+    if encoder.solver.check() == sat:
+        # Extract subalgebras
+        smt_model = encoder.solver.model()
+        K1_smt = [x for x in encoder.smt_carrier_set if smt_model.evaluate(IsInK1(x))]
+        K1 = {ModelValue(str(x)) for x in K1_smt}
+
+        K2_smt = [x for x in encoder.smt_carrier_set if smt_model.evaluate(IsInK2(x))]
+        K2 = {ModelValue(str(x)) for x in K2_smt}
+
+        return VSP_Result(True, model.name, K1, K2)
+    else:
+        return VSP_Result(False, model.name)
+
+
+def has_vsp(model: Model, impfunction: ModelFunction,
+            negation_defined: bool) -> VSP_Result:
+    if model.is_magical:
+        return has_vsp_magical(model, impfunction, negation_defined)
+
+    return has_vsp_smt(model)
