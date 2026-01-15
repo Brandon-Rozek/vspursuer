@@ -5,6 +5,7 @@ sharing property.
 from itertools import product
 from typing import List, Optional, Set, Tuple
 from common import set_to_str
+from logic import Logic, Implication
 from model import (
     Model, model_closure, ModelFunction, ModelValue
 )
@@ -12,7 +13,7 @@ from model import (
 SMT_LOADED = True
 try:
     from z3 import And, Or, Implies, sat
-    from smt import SMTModelEncoder
+    from smt import SMTModelEncoder, SMTLogicEncoder
 except ImportError:
     SMT_LOADED = False
 
@@ -194,3 +195,75 @@ def has_vsp(model: Model, impfunction: ModelFunction,
         return has_vsp_magical(model, impfunction, negation_defined)
 
     return has_vsp_smt(model)
+
+
+def logic_has_vsp(logic: Logic, size: int) -> Optional[Tuple[Model, VSP_Result]]:
+    """
+    Checks whether a given logic satisfies
+    the variable sharing property by looking
+    for a many-valued matrix of a specific size.
+
+    If the logic does witness the VSP, then
+    this function will return the matrix model
+    and the subalgebras that witness it.
+
+    Otherwise, if no matrix model of that given
+    size can be found, it will return None
+    """
+    assert size > 0
+
+    encoder = SMTLogicEncoder(logic, size)
+
+    ## The following adds constraints which satisfy the VSP
+
+    # Membership Predicates for K1/K2
+    IsInK1 = encoder.create_predicate("IsInK1", 1)
+    IsInK2 = encoder.create_predicate("IsInK2", 1)
+
+    # K1 and K2 are non-empty
+    encoder.solver.add(Or([IsInK1(x) for x in encoder.smt_carrier_set]))
+    encoder.solver.add(Or([IsInK2(x) for x in encoder.smt_carrier_set]))
+
+    # K1/K2 are closed under the operations
+    for op, SmtOp in encoder.operation_function_map.items():
+        for xs in product(encoder.smt_carrier_set, repeat=op.arity):
+            encoder.solver.add(
+                Implies(
+                    And([IsInK1(x) for x in xs]),
+                    IsInK1(SmtOp(*xs))
+                )
+            )
+            encoder.solver.add(
+                Implies(
+                    And([IsInK2(x) for x in xs]),
+                    IsInK2(SmtOp(*xs))
+                )
+            )
+
+    # x -> y is non-designated
+    Impfn = encoder.operation_function_map[Implication]
+    for (x, y) in product(encoder.smt_carrier_set, encoder.smt_carrier_set):
+        encoder.solver.add(
+            Implies(
+                And(IsInK1(x), IsInK2(y)),
+                encoder.is_designated(Impfn(x, y)) == False
+            )
+        )
+
+    model = encoder.find_model()
+
+    # We failed to find a VSP witness
+    if model is None:
+        return None
+
+    # Otherwise, a matrix model and correspoding
+    # subalgebras exist.
+
+    smt_model = encoder.solver.model()
+    K1_smt = [x for x in encoder.smt_carrier_set if smt_model.evaluate(IsInK1(x))]
+    K1 = {ModelValue(str(x)) for x in K1_smt}
+
+    K2_smt = [x for x in encoder.smt_carrier_set if smt_model.evaluate(IsInK2(x))]
+    K2 = {ModelValue(str(x)) for x in K2_smt}
+
+    return model, VSP_Result(True, model.name, K1, K2)

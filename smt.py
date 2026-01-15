@@ -221,12 +221,6 @@ class SMTLogicEncoder:
     def create_exclusion_constraint(self, model: Model) -> z3.BoolRef:
         """
         Create a constraint that excludes the given model from future solutions.
-
-        Args:
-            model: The model to exclude
-
-        Returns:
-            An SMT constraint ensuring at least one aspect differs
         """
         constraints = []
 
@@ -245,7 +239,7 @@ class SMTLogicEncoder:
                 smt_inputs = tuple(model_value_to_smt[inp] for inp in inputs)
                 smt_output = model_value_to_smt[output]
 
-                # This input->output mapping should differ
+                # For future models the input->output mapping may differ
                 constraints.append(smt_func(*smt_inputs) != smt_output)
 
         # Exclude designated value set
@@ -253,7 +247,7 @@ class SMTLogicEncoder:
             model_val = ModelValue(str(smt_elem))
             is_designated_in_model = model_val in model.designated_values
 
-            # Designation should differ
+            # Designation may differ
             if is_designated_in_model:
                 constraints.append(self.is_designated(smt_elem) == False)
             else:
