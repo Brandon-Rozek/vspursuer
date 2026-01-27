@@ -81,9 +81,11 @@ class Rule:
 class Logic:
     def __init__(self,
             operations: Set[Operation], rules: Set[Rule],
+            falsifies: Optional[Set[Rule]] = None,
             name: Optional[str] = None):
         self.operations = operations
         self.rules = rules
+        self.falsifies = falsifies if falsifies is not None else set()
         self.name = str(abs(hash((
             frozenset(operations),
             frozenset(rules)
@@ -100,17 +102,22 @@ def get_prop_var_from_term(t: Term) -> Set[PropositionalVariable]:
 
     return result
 
+def get_prop_vars_from_rule(r: Rule) -> Set[PropositionalVariable]:
+    vars: Set[PropositionalVariable] = set()
+
+    for premise in r.premises:
+        vars |= get_prop_var_from_term(premise)
+
+    vars |= get_prop_var_from_term(r.conclusion)
+
+    return vars
+
 @lru_cache
 def get_propostional_variables(rules: Tuple[Rule]) -> Set[PropositionalVariable]:
     vars: Set[PropositionalVariable] = set()
 
     for rule in rules:
-        # Get all vars in premises
-        for premise in rule.premises:
-            vars |= get_prop_var_from_term(premise)
-
-        # Get vars in conclusion
-        vars |= get_prop_var_from_term(rule.conclusion)
+        vars |= get_prop_vars_from_rule(rule)
 
     return vars
 

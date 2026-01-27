@@ -1,6 +1,9 @@
 """
 Generate all the models for a given logic
 with a specified number of elements.
+
+NOTE: This uses a naive brute-force method which
+is extremely slow.
 """
 from common import set_to_str
 from logic import Logic, Operation, Rule, get_operations_from_term
@@ -64,7 +67,7 @@ def only_rules_with(rules: Set[Rule], operation: Operation) -> List[Rule]:
 
 def possible_interpretations(
         logic: Logic, carrier_set: Set[ModelValue],
-        designated_values: Set[ModelValue]):
+        designated_values: Set[ModelValue], debug: bool):
     """
     Consider every possible interpretation of operations
     within the specified logic given the carrier set of
@@ -97,7 +100,7 @@ def possible_interpretations(
             passed_functions = candidate_functions
         if len(passed_functions) == 0:
             raise Exception("No interpretation satisfies the axioms for the operation " + str(operation))
-        else:
+        elif debug:
             print(
                   f"Operation {operation.symbol} has {len(passed_functions)} candidate functions"
             )
@@ -117,7 +120,7 @@ def possible_interpretations(
 
 def generate_model(
         logic: Logic, number_elements: int, num_solutions: int = -1,
-        print_model=False) -> List[Tuple[Model, Interpretation]]:
+        print_model=False, debug=False) -> List[Tuple[Model, Interpretation]]:
     """
     Generate the specified number of models that
     satisfy a logic of a certain size.
@@ -133,9 +136,10 @@ def generate_model(
 
     for designated_values in possible_designated_values:
         designated_values = set(designated_values)
-        print("Considering models for designated values", set_to_str(designated_values))
+        if debug:
+            print("Considering models for designated values", set_to_str(designated_values))
 
-        possible_interps = possible_interpretations(logic, carrier_set, designated_values)
+        possible_interps = possible_interpretations(logic, carrier_set, designated_values, debug)
         for interpretation in possible_interps:
             is_valid = True
             model = Model(carrier_set, set(interpretation.values()), designated_values)

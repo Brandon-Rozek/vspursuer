@@ -107,7 +107,7 @@ class ModelBuilder:
                 op = Operation(custom_mf.operation_name, custom_mf.arity)
                 interpretation[op] = custom_mf
 
-        model = Model(set(self.carrier_list), logical_operations, self.designated_values, ordering=self.ordering, name=model_name)
+        model = Model(set(self.carrier_list), logical_operations, self.designated_values, ordering=self.ordering, name=model_name, is_magical=True)
         return (model, interpretation)
 
 

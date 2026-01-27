@@ -5,7 +5,7 @@ a given logic.
 from common import set_to_str, immutable
 from logic import (
     get_propostional_variables, Logic,
-    Operation, PropositionalVariable, Term
+    Operation, PropositionalVariable, Rule, Term
 )
 from collections import defaultdict
 from functools import cached_property, lru_cache, reduce
@@ -13,7 +13,7 @@ from itertools import (
     chain, combinations_with_replacement,
     permutations, product
 )
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, Generator, List, Optional, Set, Tuple
 
 
 __all__ = ['ModelValue', 'ModelFunction', 'Model', 'Interpretation']
@@ -199,17 +199,24 @@ class Model:
             logical_operations: Set[ModelFunction],
             designated_values: Set[ModelValue],
             ordering: Optional[OrderTable] = None,
-            name: Optional[str] = None
+            name: Optional[str] = None,
+            is_magical: Optional[bool] = False
     ):
         assert designated_values <= carrier_set
         self.carrier_set = carrier_set
         self.logical_operations = logical_operations
         self.designated_values = designated_values
         self.ordering = ordering
+        # NOTE: is_magical denotes that the model
+        # comes from the software MaGIC which
+        # means we can assume several things about
+        # it's structure. See vsp.py for it's usage.
+        self.is_magical = is_magical
         self.name = str(abs(hash((
             frozenset(carrier_set),
             frozenset(logical_operations),
-            frozenset(designated_values)
+            frozenset(designated_values),
+            is_magical
         ))))[:5] if name is None else name
 
     def __str__(self):
@@ -248,7 +255,7 @@ def evaluate_term(
 
 def all_model_valuations(
         pvars: Tuple[PropositionalVariable],
-        mvalues: Tuple[ModelValue]):
+        mvalues: Tuple[ModelValue]) -> Generator[Dict[PropositionalVariable, ModelValue], Any, None]:
     """
     Given propositional variables and model values,
     produce every possible mapping between the two.
@@ -270,38 +277,51 @@ def all_model_valuations_cached(
     return list(all_model_valuations(pvars, mvalues))
 
 
+def rule_satisfied(
+        rule: Rule, valuations: List[Dict[PropositionalVariable, ModelValue]],
+        interpretation: Dict[Operation, ModelFunction], designated_values: Set[ModelValue]) -> bool:
+    """
+    Checks whether a rule holds under all valuations.
+
+    If there is a mapping where the premise holds but the consequent does
+    not then this returns False.
+    """
+    for valuation in valuations:
+        premise_met = True
+        for premise in rule.premises:
+            premise_t = evaluate_term(premise, valuation, interpretation)
+            if premise_t not in designated_values:
+                premise_met = False
+                break
+
+        # If any of the premises doesn't hold, then this won't serve as a counterexample
+        if not premise_met:
+            continue
+
+        consequent_t = evaluate_term(rule.conclusion, valuation, interpretation)
+        if consequent_t not in designated_values:
+            # Counterexample found, return False
+            return False
+
+    # No valuation found which contradicts our rule
+    return True
+
+
 def satisfiable(logic: Logic, model: Model, interpretation: Dict[Operation, ModelFunction]) -> bool:
     """
     Determine whether a model satisfies a logic
     given an interpretation.
     """
     pvars = tuple(get_propostional_variables(tuple(logic.rules)))
-    mappings = all_model_valuations_cached(pvars, tuple(model.carrier_set))
+    valuations = all_model_valuations_cached(pvars, tuple(model.carrier_set))
 
-    for mapping in mappings:
-        # Make sure that the model satisfies each of the rules
-        for rule in logic.rules:
-            # The check only applies if the premises are designated
-            premise_met = True
-            premise_ts: Set[ModelValue] = set()
+    for rule in logic.rules:
+        if not rule_satisfied(rule, valuations, interpretation, model.designated_values):
+            return False
 
-            for premise in rule.premises:
-                premise_t = evaluate_term(premise, mapping, interpretation)
-                # As soon as one premise is not designated,
-                # move to the next rule.
-                if premise_t not in model.designated_values:
-                    premise_met = False
-                    break
-                # If designated, keep track of the evaluated term
-                premise_ts.add(premise_t)
-
-            if not premise_met:
-                continue
-
-            # With the premises designated, make sure the consequent is designated
-            consequent_t = evaluate_term(rule.conclusion, mapping, interpretation)
-            if consequent_t not in model.designated_values:
-                return False
+    for rule in logic.falsifies:
+        if rule_satisfied(rule, valuations, interpretation, model.designated_values):
+            return False
 
     return True
 
