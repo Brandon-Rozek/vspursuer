@@ -13,7 +13,7 @@ from itertools import (
     chain, combinations_with_replacement,
     permutations, product
 )
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, Generator, List, Optional, Set, Tuple
 
 
 __all__ = ['ModelValue', 'ModelFunction', 'Model', 'Interpretation']
@@ -255,7 +255,7 @@ def evaluate_term(
 
 def all_model_valuations(
         pvars: Tuple[PropositionalVariable],
-        mvalues: Tuple[ModelValue]):
+        mvalues: Tuple[ModelValue]) -> Generator[Dict[PropositionalVariable, ModelValue], Any, None]:
     """
     Given propositional variables and model values,
     produce every possible mapping between the two.

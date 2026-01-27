@@ -1,5 +1,6 @@
+from functools import lru_cache
 from itertools import product
-from typing import Dict, Generator, Optional, Set, Tuple, TYPE_CHECKING
+from typing import Dict, Generator, Optional, Set, Tuple
 
 from logic import Logic, Operation, Rule, PropositionalVariable, Term, OpTerm, get_prop_vars_from_rule
 from model import Model, ModelValue, ModelFunction
@@ -27,10 +28,31 @@ def term_to_smt(
 
     assert isinstance(t, OpTerm)
 
+    # Recursively convert all arguments to SMT
     arguments = [term_to_smt(arg, op_mapping, var_mapping) for arg in t.arguments]
     fn = op_mapping[t.operation]
 
     return fn(*arguments)
+
+def all_smt_valuations(pvars: Tuple[PropositionalVariable], smtvalues):
+    """
+    Generator which maps all the propositional variable to
+    smt variables representing the carrier set.
+
+    Exhaust the generator to get all such mappings.
+    """
+    all_possible_values = product(smtvalues, repeat=len(pvars))
+    for valuation in all_possible_values:
+        mapping = dict()
+        assert len(pvars) == len(valuation)
+        for pvar, value in zip(pvars, valuation):
+            mapping[pvar] = value
+        yield mapping
+
+
+@lru_cache
+def all_smt_valuations_cached(pvars: Tuple[PropositionalVariable], smtvalues):
+    return list(all_smt_valuations(pvars, smtvalues))
 
 def logic_rule_to_smt_constraints(
     rule: Rule,
@@ -43,31 +65,29 @@ def logic_rule_to_smt_constraints(
 
     For all valuations: if premises are designated, then conclusion is designated.
     """
-    prop_vars = get_prop_vars_from_rule(rule)
+    prop_vars = tuple(get_prop_vars_from_rule(rule))
+    valuations = all_smt_valuations_cached(prop_vars, tuple(smt_carrier_set))
 
-    # Requires that the rule holds under all valuations
-    for smt_vars in product(smt_carrier_set, repeat=len(prop_vars)):
-        assert len(prop_vars) == len(smt_vars)
-
-        var_mapping = {
-            prop_var: smt_var
-            for (prop_var, smt_var) in zip(prop_vars, smt_vars)
-        }
-
+    for valuation in valuations:
         premises = [
-            IsDesignated(term_to_smt(premise, op_mapping, var_mapping)) == True
+            IsDesignated(term_to_smt(premise, op_mapping, valuation)) == True
             for premise in rule.premises
         ]
-        conclusion = IsDesignated(term_to_smt(rule.conclusion, op_mapping, var_mapping)) == True
+        conclusion = IsDesignated(term_to_smt(rule.conclusion, op_mapping, valuation)) == True
 
         if len(premises) == 0:
+            # If there are no premises, then the conclusion must always be designated
             yield conclusion
         else:
+            # Otherwise, combine all the premises with and
+            # and have that if the premises are designated
+            # then the conclusion is designated
             premise = premises[0]
             for p in premises[1:]:
                 premise = And(premise, p)
 
             yield Implies(premise, conclusion)
+
 
 def logic_falsification_rule_to_smt_constraints(
     rule: Rule,
@@ -81,24 +101,22 @@ def logic_falsification_rule_to_smt_constraints(
     There exists at least one valuation where premises are designated
     but conclusion is not designated.
     """
-    prop_vars = get_prop_vars_from_rule(rule)
+    prop_vars = tuple(get_prop_vars_from_rule(rule))
+    valuations = all_smt_valuations_cached(prop_vars, tuple(smt_carrier_set))
 
     # Collect all possible counter-examples (valuations that falsify the rule)
     counter_examples = []
 
-    for smt_vars in product(smt_carrier_set, repeat=len(prop_vars)):
-        assert len(prop_vars) == len(smt_vars)
-
-        var_mapping = {
-            prop_var: smt_var
-            for (prop_var, smt_var) in zip(prop_vars, smt_vars)
-        }
+    for valuation in valuations:
+        # The rule is falsified when all of our premises
+        # are designated but our conclusion is not designated
 
         premises = [
-            IsDesignated(term_to_smt(premise, op_mapping, var_mapping)) == True
+            IsDesignated(term_to_smt(premise, op_mapping, valuation)) == True
             for premise in rule.premises
         ]
-        conclusion = IsDesignated(term_to_smt(rule.conclusion, op_mapping, var_mapping)) == False
+
+        conclusion = IsDesignated(term_to_smt(rule.conclusion, op_mapping, valuation)) == False
 
         if len(premises) == 0:
             counter_examples.append(conclusion)
