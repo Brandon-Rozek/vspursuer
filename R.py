@@ -12,7 +12,8 @@ from logic import (
 )
 from model import Model, ModelFunction, ModelValue, satisfiable
 from generate_model import generate_model
-# from vsp import has_vsp
+from vsp import has_vsp
+from smt import smt_is_loaded
 
 
 # ===================================================
@@ -56,12 +57,17 @@ disjunction_rules = {
     Rule({Conjunction(x, Disjunction(y, z)),}, Disjunction(Conjunction(x, y), Conjunction(x, z)))
 }
 
+falsification_rules = {
+    # At least one value is non-designated
+    Rule(set(), x)
+}
+
 
 logic_rules = implication_rules | negation_rules | conjunction_rules | disjunction_rules
 
 operations = {Negation, Conjunction, Disjunction, Implication}
 
-R_logic = Logic(operations, logic_rules, "R")
+R_logic = Logic(operations, logic_rules, falsification_rules, "R")
 
 # ===============================
 
@@ -69,36 +75,36 @@ R_logic = Logic(operations, logic_rules, "R")
 Example 2-Element Model of R
 """
 
-a0 = ModelValue("a0")
-a1 = ModelValue("a1")
+a0 = ModelValue("0")
+a1 = ModelValue("1")
 
 carrier_set = {a0, a1}
 
 mnegation = ModelFunction(1, {
     a0: a1,
     a1: a0
-})
+}, "¬")
 
 mimplication = ModelFunction(2, {
     (a0, a0): a1,
     (a0, a1): a1,
     (a1, a0): a0,
     (a1, a1): a1
-})
+}, "→")
 
 mconjunction = ModelFunction(2, {
     (a0, a0): a0,
     (a0, a1): a0,
     (a1, a0): a0,
     (a1, a1): a1
-})
+}, "∧")
 
 mdisjunction = ModelFunction(2, {
     (a0, a0): a0,
     (a0, a1): a1,
     (a1, a0): a1,
     (a1, a1): a1
-})
+}, "∨")
 
 
 designated_values = {a1}
@@ -117,11 +123,18 @@ interpretation = {
 
 print(R_model_2)
 
+print(f"Does {R_model_2.name} satisfy the logic R?", satisfiable(R_logic, R_model_2, interpretation))
+
+if smt_is_loaded():
+    print(has_vsp(R_model_2, mimplication, True, True))
+else:
+    print("Z3 not setup, skipping VSP check...")
+
 
 # =================================
 
 """
-Generate models of R of a specified size
+Generate models of R of a specified size using the slow approach
 """
 
 print("*" * 30)
@@ -130,14 +143,20 @@ model_size = 2
 print("Generating models of Logic", R_logic.name, "of size", model_size)
 solutions = generate_model(R_logic, model_size, print_model=False)
 
-print(f"Found {len(solutions)} satisfiable models")
+if smt_is_loaded():
+    num_satisfies_vsp = 0
+    for model, interpretation in solutions:
+        negation_defined = Negation in interpretation
+        conj_disj_defined = Conjunction in interpretation and Disjunction in interpretation
+        if has_vsp(model, interpretation[Implication], negation_defined, conj_disj_defined).has_vsp:
+            num_satisfies_vsp += 1
 
-# for model, interpretation in solutions:
-#     print(has_vsp(model, interpretation))
+    print(f"Found {len(solutions)} satisfiable models of size {model_size}, {num_satisfies_vsp} of which satisfy VSP")
+
 
 print("*" * 30)
 
-######
+# =================================
 
 """
 Showing the smallest model for R that has the
@@ -146,12 +165,12 @@ variable sharing property.
 This model has 6 elements.
 """
 
-a0 = ModelValue("a0")
-a1 = ModelValue("a1")
-a2 = ModelValue("a2")
-a3 = ModelValue("a3")
-a4 = ModelValue("a4")
-a5 = ModelValue("a5")
+a0 = ModelValue("0")
+a1 = ModelValue("1")
+a2 = ModelValue("2")
+a3 = ModelValue("3")
+a4 = ModelValue("4")
+a5 = ModelValue("5")
 
 carrier_set = { a0, a1, a2, a3, a4, a5 }
 designated_values = {a1, a2, a3, a4, a5 }
@@ -312,4 +331,26 @@ interpretation = {
 
 print(R_model_6)
 print(f"Model {R_model_6.name} satisfies logic {R_logic.name}?", satisfiable(R_logic, R_model_6, interpretation))
-# print(has_vsp(R_model_6, interpretation))
+if smt_is_loaded():
+    print(has_vsp(R_model_6, mimplication, True, True))
+else:
+    print("Z3 not loaded, skipping VSP check...")
+
+"""
+Generate models of R of a specified size using the SMT approach
+"""
+
+from vsp import logic_has_vsp
+
+size = 7
+print(f"Searching for a model of size {size} which witness VSP...")
+if smt_is_loaded():
+    solution = logic_has_vsp(R_logic, size)
+    if solution is None:
+        print(f"No models found of size {size} which witness VSP")
+    else:
+        model, vsp_result = solution
+        print(vsp_result)
+        print(model)
+else:
+    print("Z3 not setup, skipping...")

@@ -85,7 +85,7 @@ class Logic:
             name: Optional[str] = None):
         self.operations = operations
         self.rules = rules
-        self.falsifies = falsifies
+        self.falsifies = falsifies if falsifies is not None else set()
         self.name = str(abs(hash((
             frozenset(operations),
             frozenset(rules)

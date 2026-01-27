@@ -10,12 +10,12 @@ from model import (
     Model, model_closure, ModelFunction, ModelValue
 )
 
-SMT_LOADED = True
+from smt import SMTModelEncoder, SMTLogicEncoder, smt_is_loaded
+
 try:
     from z3 import And, Or, Implies, sat
-    from smt import SMTModelEncoder, SMTLogicEncoder
 except ImportError:
-    SMT_LOADED = False
+    pass
 
 class VSP_Result:
     def __init__(
@@ -139,7 +139,7 @@ def has_vsp_smt(model: Model, impfn: ModelFunction) -> VSP_Result:
     Checks whether a given model satisfies the variable
     sharing property via SMT
     """
-    if not SMT_LOADED:
+    if not smt_is_loaded():
         raise Exception("Z3 is not property installed, cannot check via SMT")
 
     encoder = SMTModelEncoder(model)
@@ -198,7 +198,7 @@ def has_vsp(model: Model, impfunction: ModelFunction,
     if model.is_magical:
         return has_vsp_magical(model, impfunction, negation_defined, conjunction_disjunction_defined)
 
-    return has_vsp_smt(model)
+    return has_vsp_smt(model, impfunction)
 
 
 def logic_has_vsp(logic: Logic, size: int) -> Optional[Tuple[Model, VSP_Result]]:
@@ -254,15 +254,15 @@ def logic_has_vsp(logic: Logic, size: int) -> Optional[Tuple[Model, VSP_Result]]
             )
         )
 
-    model = encoder.find_model()
+    solution = encoder.find_model()
 
     # We failed to find a VSP witness
-    if model is None:
+    if solution is None:
         return None
 
     # Otherwise, a matrix model and correspoding
     # subalgebras exist.
-
+    model, _ = solution
     smt_model = encoder.solver.model()
     K1_smt = [x for x in encoder.smt_carrier_set if smt_model.evaluate(IsInK1(x))]
     K1 = {ModelValue(str(x)) for x in K1_smt}
