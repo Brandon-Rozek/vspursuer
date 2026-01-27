@@ -303,7 +303,7 @@ def rule_satisfied(
             # Counterexample found, return False
             return False
 
-    # No mapping found which contradicts our rule
+    # No valuation found which contradicts our rule
     return True
 
 
