@@ -5,7 +5,7 @@ a given logic.
 from common import set_to_str, immutable
 from logic import (
     get_propostional_variables, Logic,
-    Operation, PropositionalVariable, Term
+    Operation, PropositionalVariable, Rule, Term
 )
 from collections import defaultdict
 from functools import cached_property, lru_cache, reduce
@@ -277,67 +277,50 @@ def all_model_valuations_cached(
     return list(all_model_valuations(pvars, mvalues))
 
 
+def rule_satisfied(
+        rule: Rule, valuations: List[Dict[PropositionalVariable, ModelValue]],
+        interpretation: Dict[Operation, ModelFunction], designated_values: Set[ModelValue]) -> bool:
+    """
+    Checks whether a rule holds under all valuations listed in mapping.
+
+    If there is a mapping where the premise holds but the consequent does
+    not then this returns False.
+    """
+    for valuation in valuations:
+        premise_met = True
+        for premise in rule.premises:
+            premise_t = evaluate_term(premise, valuation, interpretation)
+            if premise_t not in designated_values:
+                premise_met = False
+                break
+
+        # If any of the premises doesn't hold, then this won't serve as a counterexample
+        if not premise_met:
+            continue
+
+        consequent_t = evaluate_term(rule.conclusion, valuation, interpretation)
+        if consequent_t not in designated_values:
+            # Counterexample found, return False
+            return False
+
+    # No mapping found which contradicts our rule
+    return True
+
+
 def satisfiable(logic: Logic, model: Model, interpretation: Dict[Operation, ModelFunction]) -> bool:
     """
     Determine whether a model satisfies a logic
     given an interpretation.
     """
     pvars = tuple(get_propostional_variables(tuple(logic.rules)))
-    mappings = all_model_valuations_cached(pvars, tuple(model.carrier_set))
+    valuations = all_model_valuations_cached(pvars, tuple(model.carrier_set))
 
     for rule in logic.rules:
-        # The rule most hold for all valuations
-        for mapping in mappings:
-            # The check only applies if the premises are designated
-            premise_met = True
-            premise_ts: Set[ModelValue] = set()
-
-            for premise in rule.premises:
-                premise_t = evaluate_term(premise, mapping, interpretation)
-                # As soon as one premise is not designated,
-                # move to the next rule.
-                if premise_t not in model.designated_values:
-                    premise_met = False
-                    break
-                # If designated, keep track of the evaluated term
-                premise_ts.add(premise_t)
-
-            if not premise_met:
-                continue
-
-            # With the premises designated, make sure the consequent is designated
-            consequent_t = evaluate_term(rule.conclusion, mapping, interpretation)
-            if consequent_t not in model.designated_values:
-                return False
+        if not rule_satisfied(rule, valuations, interpretation, model.designated_values):
+            return False
 
     for rule in logic.falsifies:
-        # We must find one mapping where this does not hold
-        counterexample_found = False
-        for mapping in mappings:
-            # The check only applies if the premises are designated
-            premise_met = True
-            premise_ts: Set[ModelValue] = set()
-
-            for premise in rule.premises:
-                premise_t = evaluate_term(premise, mapping, interpretation)
-                # As soon as one premise is not designated,
-                # move to the next rule.
-                if premise_t not in model.designated_values:
-                    premise_met = False
-                    break
-                # If designated, keep track of the evaluated term
-                premise_ts.add(premise_t)
-
-            if not premise_met:
-                continue
-
-            # With the premises designated, make sure the consequent is not designated
-            consequent_t = evaluate_term(rule.conclusion, mapping, interpretation)
-            if consequent_t not in model.designated_values:
-                counterexample_found = True
-                break
-
-        if not counterexample_found:
+        if rule_satisfied(rule, valuations, interpretation, model.designated_values):
             return False
 
     return True
