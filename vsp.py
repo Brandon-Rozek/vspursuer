@@ -29,14 +29,14 @@ class VSP_Result:
 
     def __str__(self):
         if not self.has_vsp:
-            return f"Model {self.model_name} does not have the variable sharing property."
-        return f"""Model {self.model_name} has the variable sharing property.
+            return f"Matrix {self.model_name} does not have the variable sharing property."
+        return f"""Matrix {self.model_name} has the variable sharing property.
 Subalgebra 1: {set_to_str(self.subalgebra1)}
 Subalgebra 2: {set_to_str(self.subalgebra2)}
 """
 
 def has_vsp_magical(model: Model, impfunction: ModelFunction,
-            negation_defined: bool) -> VSP_Result:
+            negation_defined: bool, conjunction_disjunction_defined: bool) -> VSP_Result:
     """
     Checks whether a MaGIC model has the variable
     sharing property.
@@ -44,6 +44,10 @@ def has_vsp_magical(model: Model, impfunction: ModelFunction,
     # NOTE: No models with only one designated
     # value satisfies VSP
     if len(model.designated_values) == 1:
+        return VSP_Result(False, model.name)
+
+    if len(model.carrier_set) in [2,3,4,5,7] \
+        and conjunction_disjunction_defined and negation_defined:
         return VSP_Result(False, model.name)
 
     assert model.ordering is not None, "Expected ordering table in model"
@@ -190,9 +194,9 @@ def has_vsp_smt(model: Model, impfn: ModelFunction) -> VSP_Result:
 
 
 def has_vsp(model: Model, impfunction: ModelFunction,
-            negation_defined: bool) -> VSP_Result:
+            negation_defined: bool, conjunction_disjunction_defined: bool) -> VSP_Result:
     if model.is_magical:
-        return has_vsp_magical(model, impfunction, negation_defined)
+        return has_vsp_magical(model, impfunction, negation_defined, conjunction_disjunction_defined)
 
     return has_vsp_smt(model)
 

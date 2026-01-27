@@ -56,9 +56,9 @@ if __name__ == "__main__":
     extra_models1 = 0
     extra_models2 = 0
 
-    for model, impfunction, negation_defined in solutions1:
+    for model, impfunction, negation_defined, conjunction_disjunction_defined in solutions1:
         total_models1 += 1
-        vsp_result = has_vsp(model, impfunction, negation_defined)
+        vsp_result = has_vsp(model, impfunction, negation_defined, conjunction_disjunction_defined)
 
         if vsp_result.has_vsp:
             good_models1 += 1
@@ -83,9 +83,9 @@ if __name__ == "__main__":
 
 
     # Check through the remaining models in the second set
-    for model, impfunction, negation_defined in solutions2:
+    for model, impfunction, negation_defined, conjunction_disjunction_defined in solutions2:
         total_models2 += 1
-        vsp_result = has_vsp(model, impfunction, negation_defined)
+        vsp_result = has_vsp(model, impfunction, negation_defined, conjunction_disjunction_defined)
 
         if not vsp_result.has_vsp:
             bad_models2 += 1
