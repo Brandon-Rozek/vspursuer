@@ -281,7 +281,7 @@ def rule_satisfied(
         rule: Rule, valuations: List[Dict[PropositionalVariable, ModelValue]],
         interpretation: Dict[Operation, ModelFunction], designated_values: Set[ModelValue]) -> bool:
     """
-    Checks whether a rule holds under all valuations listed in mapping.
+    Checks whether a rule holds under all valuations.
 
     If there is a mapping where the premise holds but the consequent does
     not then this returns False.
