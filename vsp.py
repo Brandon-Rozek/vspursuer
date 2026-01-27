@@ -168,7 +168,7 @@ def has_vsp_smt(model: Model, impfn: ModelFunction) -> VSP_Result:
                 )
             )
 
-    # x -> y is non-designated
+    # x -> y is non-designated for any x in K1 and y in K2
     smt_imp = encoder.model_function_map[impfn]
     for (x, y) in product(encoder.smt_carrier_set, encoder.smt_carrier_set):
         encoder.solver.add(

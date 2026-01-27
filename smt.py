@@ -230,7 +230,7 @@ class SMTLogicEncoder:
             for smt_elem in self.smt_carrier_set
         }
 
-        # Exclude operation function mappings
+        # Iterate over all logical operations
         for model_func in model.logical_operations:
             operation = Operation(model_func.operation_name, model_func.arity)
             smt_func = self.operation_function_map[operation]
@@ -239,10 +239,9 @@ class SMTLogicEncoder:
                 smt_inputs = tuple(model_value_to_smt[inp] for inp in inputs)
                 smt_output = model_value_to_smt[output]
 
-                # For future models the input->output mapping may differ
+                # It may be the case that the output of f(input) differs
                 constraints.append(smt_func(*smt_inputs) != smt_output)
 
-        # Exclude designated value set
         for smt_elem in self.smt_carrier_set:
             model_val = ModelValue(str(smt_elem))
             is_designated_in_model = model_val in model.designated_values
