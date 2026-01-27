@@ -244,7 +244,7 @@ def logic_has_vsp(logic: Logic, size: int) -> Optional[Tuple[Model, VSP_Result]]
                 )
             )
 
-    # x -> y is non-designated
+    # x -> y is non-designated for any x in k1 and y in k2
     Impfn = encoder.operation_function_map[Implication]
     for (x, y) in product(encoder.smt_carrier_set, encoder.smt_carrier_set):
         encoder.solver.add(
