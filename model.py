@@ -77,31 +77,64 @@ class ModelFunction:
     def __call__(self, *args):
         return self.mapping[args]
 
+def natural_sort(v: ModelValue):
+    """
+    Produces a tuple for which when sorted
+    places the model values whose name is numeric first and sorted
+    in numerical order and otherwise puts non-numeric names
+    afterwards and sorted lexographically.
+
+    Example when sorted: (0, 1), (0, 2), (0, 3), (1, "a"), (1, "b")
+    """
+    try:
+        return (0, int(v.name))
+    except ValueError:
+        return (1, v.name)
 
 def unary_function_str(f: ModelFunction) -> str:
     assert isinstance(f, ModelFunction) and f.arity == 1
-    sorted_domain = sorted(f.domain, key=lambda v : v.name)
-    header_line = f" {f.operation_name} | " + " ".join((str(v) for v in sorted_domain))
-    sep_line = "-" + ("-" * len(f.operation_name)) + "-+-" +\
-         ("-" * len(sorted_domain)) +\
-         ("-" * reduce(lambda sum, v : sum + len(v.name), sorted_domain, 0))
-    data_line = (" " * (len(f.operation_name) + 2)) + "| " + " ".join((str(f.mapping[(v,)]) for v in sorted_domain))
+    sorted_domain = sorted(f.domain, key=natural_sort)
+    
+    # Calculate the maximum width needed for any value
+    max_value_width = max(len(str(v)) for v in sorted_domain)
+    
+    # Build header line with proper spacing
+    header_values = " ".join(str(v).rjust(max_value_width) for v in sorted_domain)
+    header_line = f" {f.operation_name} | {header_values}"
+    
+    # Calculate separator line length
+    sep_line = "-" * (len(f.operation_name) + 2) + "+" + "-" * (len(header_values) + 1)
+    
+    # Build data line with proper spacing
+    data_values = " ".join(str(f.mapping[(v,)]).rjust(max_value_width) for v in sorted_domain)
+    data_line = " " * (len(f.operation_name) + 2) + "| " + data_values
+    
     return "\n".join((header_line, sep_line, data_line)) + "\n"
 
 def binary_function_str(f: ModelFunction) -> str:
     assert isinstance(f, ModelFunction) and f.arity == 2
-    sorted_domain = sorted(f.domain, key=lambda v : v.name)
-    max_col_width = max(chain((len(v.name) for v in sorted_domain), (len(f.operation_name),)))
-    header_line = f" {f.operation_name} " +\
-         (" " * (max_col_width - len(f.operation_name))) + "| " +\
-         " ".join((str(v) for v in sorted_domain))
-    sep_line = "-" + ("-" * max_col_width) + "-+-" +\
-         ("-" * len(sorted_domain)) +\
-         ("-" * reduce(lambda sum, v : sum + len(v.name), sorted_domain, 0))
+    sorted_domain = sorted(f.domain, key=natural_sort)
+    
+    # Calculate the maximum width needed for any value
+    max_value_width = max(len(str(v)) for v in sorted_domain)
+    
+    # Use the max of operation name length and value width for row labels
+    max_col_width = max(max_value_width, len(f.operation_name))
+    
+    # Build header line with proper spacing
+    header_values = " ".join(str(v).rjust(max_value_width) for v in sorted_domain)
+    header_line = f" {f.operation_name.ljust(max_col_width)} | {header_values}"
+    
+    # Calculate separator line length
+    sep_line = "-" * (max_col_width + 2) + "+" + "-" * (len(header_values) + 1)
+    
+    # Build data lines with proper spacing
     data_lines = ""
     for row_v in sorted_domain:
-        data_line = f" {row_v.name} | " + " ".join((str(f.mapping[(row_v, col_v)]) for col_v in sorted_domain))
+        row_values = " ".join(str(f.mapping[(row_v, col_v)]).rjust(max_value_width) for col_v in sorted_domain)
+        data_line = f" {str(row_v).ljust(max_col_width)} | {row_values}"
         data_lines += data_line + "\n"
+    
     return "\n".join((header_line, sep_line, data_lines))
 
 Interpretation = Dict[Operation, ModelFunction]
@@ -222,8 +255,8 @@ class Model:
     def __str__(self):
         result = ("=" * 25) + f"""
 Matrix Name: {self.name}
-Carrier Set: {set_to_str(self.carrier_set)}
-Designated Values: {set_to_str(self.designated_values)}
+Carrier Set: {set_to_str(sorted(self.carrier_set, key=lambda v: natural_sort(v)))}
+Designated Values: {set_to_str(sorted(self.designated_values, key=lambda v: natural_sort(v)))}
 """
         for function in self.logical_operations:
             result += f"{str(function)}\n"
